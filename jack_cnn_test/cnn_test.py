@@ -5,6 +5,7 @@ import torch.nn as nn
 import pandas as pd
 import json
 import cv2
+import matplotlib.pyplot as plt
 
 from transformers import BertTokenizer, BertModel
 from sklearn.model_selection import train_test_split
@@ -90,24 +91,34 @@ class PartialImageDataset(torch.utils.data.Dataset):
 
 # %% Define the Model
 class ConvBlock(nn.Module):
-    """Two 3x3 convolutions with ReLU and Batch Norm."""
-    def __init__(self, in_c, out_c):
+    def __init__(self, in_channels, out_channels, dropout_rate=0.0):
         super().__init__()
-        self.conv = nn.Sequential(
-            nn.Conv2d(in_c, out_c, kernel_size=3, padding=1, bias=False),
-            nn.BatchNorm2d(out_c),
+
+        layers = [
+            nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1),
+            nn.BatchNorm2d(out_channels),
             nn.ReLU(inplace=True),
-            nn.Conv2d(out_c, out_c, kernel_size=3, padding=1, bias=False),
-            nn.BatchNorm2d(out_c),
+        ]
+
+        # Only add dropout if the rate is non-zero
+        if dropout_rate > 0.0:
+            layers.append(nn.Dropout2d(p=dropout_rate))
+            # Note: Dropout2d is the correct choice for Conv layers
+
+        layers.extend([
+            nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1),
+            nn.BatchNorm2d(out_channels),
             nn.ReLU(inplace=True)
-        )
+        ])
+
+        self.conv_block = nn.Sequential(*layers)
 
     def forward(self, x):
-        return self.conv(x)
+        return self.conv_block(x)
 
 # --- 2. The Conditional U-Net Model ---
 class ArtistModel(nn.Module):
-    def __init__(self, img_channels=1, base_c=64,depth = 4,bert_model_name = 'bert-base-uncased'):
+    def __init__(self, img_channels=1, base_c=64,depth = 4, dropout_rate=.2, bert_model_name = 'bert-base-uncased',device=torch.device("cuda" if torch.cuda.is_available() else "cpu")):
         super().__init__()
         self.tokenizer = BertTokenizer.from_pretrained(bert_model_name)
         self.bert_model = BertModel.from_pretrained(bert_model_name).to(self.device if hasattr(self, 'device') else 'cpu')
@@ -115,16 +126,17 @@ class ArtistModel(nn.Module):
             param.requires_grad = False
         self.embed_dim = self.bert_model.config.hidden_size
         self.depth=depth
+        self.device = device
         # Define channel sizes
         self.c_levels = [base_c*(2**i) for i in range(depth)]
 
         # Create Encoder
-        self.encoders = nn.ModuleList([ConvBlock(img_channels if d==0 else self.c_levels[d-1], self.c_levels[d]) for d in range(depth)])
+        self.encoders = nn.ModuleList([ConvBlock(img_channels if d==0 else self.c_levels[d-1], self.c_levels[d],dropout_rate=dropout_rate) for d in range(depth)])
         self.poll = nn.MaxPool2d(kernel_size=2, stride=2)
 
         # 2. BOTTLENECK (Feature Fusion Point)
         # The input to the bottleneck comes from the image (self.c_levels[-1]) plus the expanded language embedding (embed_dim).
-        self.bottleneck = ConvBlock(self.c_levels[-1] + self.embed_dim, self.c_levels[-1])
+        self.bottleneck = ConvBlock(self.c_levels[-1] + self.embed_dim, self.c_levels[-1],dropout_rate=dropout_rate*2)
 
         self.upconvs = nn.ModuleList()
         self.decoders = nn.ModuleList()
@@ -136,6 +148,15 @@ class ArtistModel(nn.Module):
         self.decoders.append(ConvBlock(self.c_levels[0]*2, self.c_levels[0]))
 
         self.out_conv = nn.Conv2d(self.c_levels[0] , img_channels, kernel_size=1)
+
+        self.to(self.device)
+
+    @classmethod
+    def to_bw_img(img:torch.Tensor):
+        return (img > 0.5).float() * 255
+
+    def to_float_img(self,img:torch.Tensor):
+        return img.unsqueeze(1).float().to(self.device) / 255.0
 
     def forward(self, x, text_input):        # x: (B, 1, 256, 256), lang_embedding: (B, E_DIM)
         c_inner = []
@@ -187,17 +208,66 @@ class ArtistModel(nn.Module):
             b = self.decoders[i](u)
 
         # --- 4. OUTPUT ---
-        output_image = torch.tanh(self.out_conv(b)) # Use tanh to constrain output to [-1, 1] range
+        output_image = torch.sigmoid(self.out_conv(b))
 
         return output_image
 
 
+class TVLoss(nn.Module):
+    """
+    Calculates the Total Variation Loss to encourage spatial smoothness.
+    Penalizes the difference between adjacent pixels.
+    """
+    def __init__(self, weight=1.0):
+        super(TVLoss, self).__init__()
+        self.weight = weight
 
-# %% Helper Functions
-def add_stroke_to_image(image, stroke, stroke_width=1):
-    for i in range(len(stroke[0])-1):
-        cv2.line(image, (stroke[0][i], stroke[1][i]), (stroke[0][i+1], stroke[1][i+1]), (0,0,0), stroke_width)
-    return image
+    def forward(self, x):
+        # x is the model output (e.g., [B, C, H, W] in the [0, 1] range)
+
+        # 1. Horizontal variation (difference between pixel (i, j) and (i, j+1))
+        # We slice the tensor to align pixels for subtraction.
+        # This calculates the differences for all but the last column.
+        horiz_diff = x[:, :, :, :-1] - x[:, :, :, 1:]
+
+        # 2. Vertical variation (difference between pixel (i, j) and (i+1, j))
+        # This calculates the differences for all but the last row.
+        vert_diff = x[:, :, :-1, :] - x[:, :, 1:, :]
+
+        # Calculate the L2-norm squared for horizontal and vertical differences
+        # We use squaring (L2) instead of absolute value (L1) as it is differentiable
+        # and often results in better optimization.
+        tv_loss = torch.sum(horiz_diff.pow(2)) + torch.sum(vert_diff.pow(2))
+
+        # Scale by the weight
+        return self.weight * tv_loss
+
+class DiceLoss(nn.Module):
+    """
+    Computes 1 - Dice Score, which is (1 - 2*Intersection / (A + B)).
+    Assumes input 'pred' is the probability output (after Sigmoid).
+    """
+    def __init__(self, smooth=1e-6):
+        super(DiceLoss, self).__init__()
+        self.smooth = smooth
+
+    def forward(self, prediction, target):
+        # Flatten tensors to operate on pixels, not batches/channels
+        prediction = prediction.contiguous().view(-1)
+        target = target.contiguous().view(-1)
+
+        # Calculate Intersection (True Positives)
+        intersection = (prediction * target).sum()
+
+        # Calculate Union (Sum of all predicted and target pixels)
+        dice_sum = prediction.sum() + target.sum()
+
+        # Dice Score: 2 * Intersection / Union
+        dice_score = (2. * intersection + self.smooth) / (dice_sum + self.smooth)
+
+        # Dice Loss: 1 - Dice Score
+        return 1. - dice_score
+
 
 # %% Load Data
 dataset_path = "data/master_doodle_dataframe.csv"
@@ -206,7 +276,7 @@ full_data = full_raw_data.drop(columns=["countrycode", "recognized", "key_id", "
 full_label_list = full_data['word'].unique().tolist()
 # %% Subset Data
 subset_labels = ['apple', 'banana', 'bicycle', 'car', 'cat']
-subsample_dataset_ratio = 0.05
+subsample_dataset_ratio = 0.1
 train_test_split_ratio = .8
 split_seed = 42
 batch_size = 4
@@ -242,25 +312,36 @@ print(output.shape)
 # %% Build Model
 model_depth = 3
 learning_rate = 1e-3
+white_ratio = .95
+pos_weight_value = (1-white_ratio) / white_ratio
+num_epochs = 3
+lambda_bin = 0.001
+lambda_dice = 0.1  # Weight for Dice Loss (Good starting point: 0.05 to 0.2)
+lambda_tv = 0.01   # Weight for TV Loss (Start small: 0.005 to 0.05)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # device = torch.device("cpu")
-model = ArtistModel(depth=model_depth).to(device)
+model = ArtistModel(depth=model_depth)
 optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
-criterion = nn.MSELoss()
-num_epochs = 5
+criterion_bse = nn.BCEWithLogitsLoss(pos_weight=torch.tensor(pos_weight_value))
+criterion_dice = DiceLoss()
+criterion_tv = TVLoss(weight=1.0)
 # %% Train Model
 for epoch in range(num_epochs):
     model.train()
     running_loss = 0.0
     for i, (partial_imgs, labels, next_strokes) in enumerate(train_dataloader):
-        partial_imgs = partial_imgs.unsqueeze(1).float().to(device) / 255.0 * 2 - 1 # Normalize to [-1, 1]
-        next_strokes = next_strokes.unsqueeze(1).float().to(device) / 255.0 * 2 - 1 # Normalize to [-1, 1]
+        partial_imgs = model.to_float_img(partial_imgs)
+        next_strokes = model.to_float_img(next_strokes)
         optimizer.zero_grad()
         outputs = model(partial_imgs, labels)
-        loss = criterion(outputs, next_strokes)
-        loss.backward()
+        loss_bce  = criterion_bse(outputs, next_strokes)
+        loss_dice = criterion_dice(outputs, next_strokes)
+        loss_tv = criterion_tv(outputs, next_strokes)
+        loss_binary = 4 * torch.mean(outputs * (1 - outputs))
+        total_loss = loss_bce + lambda_bin * loss_binary + (lambda_dice * loss_dice) + (lambda_tv * loss_tv)
+        total_loss.backward()
         optimizer.step()
-        running_loss += loss.item()
+        running_loss += total_loss.item()
         if (i+1) % 100 == 0:
             print(f"Epoch [{epoch+1}/{num_epochs}], Step [{i+1}/{len(train_dataloader)}], Loss: {running_loss/100:.4f}")
             running_loss = 0.0
@@ -270,11 +351,27 @@ for epoch in range(num_epochs):
     val_loss = 0.0
     with torch.no_grad():
         for partial_imgs, labels, next_strokes in test_dataloader:
-            partial_imgs = partial_imgs.unsqueeze(1).float().to(device) / 255.0 * 2 - 1
-            next_strokes = next_strokes.unsqueeze(1).float().to(device) / 255.0 * 2 - 1
+            partial_imgs = model.to_float_img(partial_imgs)
+            next_strokes = model.to_float_img(next_strokes)
             outputs = model(partial_imgs, labels)
-            loss = criterion(outputs, next_strokes)
-            val_loss += loss.item()
+            loss_bce  = criterion_bse(outputs, next_strokes)
+            loss_dice = criterion_dice(outputs, next_strokes)
+            loss_tv = criterion_tv(outputs, next_strokes)
+            loss_binary = 4 * torch.mean(outputs * (1 - outputs))
+            total_loss = loss_bce + lambda_bin * loss_binary + (lambda_dice * loss_dice) + (lambda_tv * loss_tv)
+            val_loss += total_loss.item()
     val_loss /= len(test_dataloader)
     print(f"Epoch [{epoch+1}/{num_epochs}], Validation Loss: {val_loss:.4f}")
 
+# %% Save Model
+import time
+torch.save(model.state_dict(), f"../jack_cnn_test/saved_models/{time.strftime('%m%d_%H%M%S', time.localtime())}_artist_model.pth")
+
+#%%
+weights = torch.load("../jack_cnn_test/saved_models/1006_212659_artist_model.pth", weights_only=True,map_location=device)
+model_test = ArtistModel(depth=model_depth).to(device)
+model_test.load_state_dict(weights)
+partial_imgs, labels, next_strokes =  next(iter(test_dataloader))
+partial_imgs = partial_imgs.unsqueeze(1).float().to(device) / 255.0 * 2 - 1
+next_strokes = next_strokes.unsqueeze(1).float().to(device) / 255.0 * 2 - 1
+outputs = model_test(partial_imgs, labels)
