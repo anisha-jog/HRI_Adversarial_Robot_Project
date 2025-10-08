@@ -342,16 +342,19 @@ class Attention(nn.Module):
         return context_vector, alphas
 
 class StrokeModel(nn.Module):
-    def __init__(self, base_c=64, depth=3, hidden_size=512, dropout_p=0.2, max_stroke_len=100, img_length=256,
+    def __init__(self, base_c=64, depth=3, hidden_size=512,lang_hidden_size=128, dropout_p=0.2, max_stroke_len=100, img_length=256,
                  bert_model_name = 'bert-base-uncased',device=torch.device("cuda" if torch.cuda.is_available() else "cpu")):
         super().__init__()
         img_channels = 1
         self.img_len = img_length
+        self.hidden_size = hidden_size
+        self.lang_hidden_size = lang_hidden_size
         self.tokenizer = BertTokenizer.from_pretrained(bert_model_name)
         self.bert_model = BertModel.from_pretrained(bert_model_name).to(self.device if hasattr(self, 'device') else 'cpu')
         for param in self.bert_model.parameters():
             param.requires_grad = False
         self.embed_dim = self.bert_model.config.hidden_size
+        self.bert_projection = nn.Linear(self.embed_dim, self.lang_hidden_size)
 
         # --- U-NET ENCODER (Image Feature Extraction) ---
         self.depth = depth
@@ -393,14 +396,14 @@ class StrokeModel(nn.Module):
 
         # Initial hidden state (h0, c0) from bottleneck features
         # Bottleneck features are projected down to the size of the LSTM hidden state
-        self.h_init = nn.Linear(self.bottleneck_c * final_h_w * final_h_w, hidden_size)
-        self.c_init = nn.Linear(self.bottleneck_c * final_h_w * final_h_w, hidden_size)
+        self.h_init = nn.Linear(self.bottleneck_c * final_h_w * final_h_w + self.embed_dim, hidden_size)
+        self.c_init = nn.Linear(self.bottleneck_c * final_h_w * final_h_w + self.embed_dim, hidden_size)
 
         # Attention Mechanism (Context from bottleneck, Hidden from LSTM)
         self.attention = Attention(encoder_dim=self.bottleneck_c, decoder_dim=hidden_size)
 
         # LSTM Decoder (Input: previous coordinate (2) + context vector (hidden_size))
-        self.lstm = nn.LSTM(input_size=2 + self.bottleneck_c,
+        self.lstm = nn.LSTM(input_size=2 + self.bottleneck_c + self.lang_hidden_size,
                             hidden_size=hidden_size,
                             batch_first=True)
 
@@ -437,6 +440,7 @@ class StrokeModel(nn.Module):
         # Extract the contextual embedding for the whole sentence (the [CLS] token)
         # embedding_vector shape: (B, EMBEDDING_DIM=768)
         embedding_vector = bert_output.last_hidden_state[:, 0, :]
+        projected_bert = self.bert_projection(embedding_vector)
 
         # 2. BOTTLENECK (Feature Fusion)
         # Bert embeds are typically [B, 768]. Reshape to [B, 768, 1, 1] and tile.
@@ -448,17 +452,18 @@ class StrokeModel(nn.Module):
 
         # Parameter Head
         flat_features = context.view(context.size(0), -1)
+        flat_features_with_embedd = torch.cat([flat_features, embedding_vector], dim=1)
         param_output = self.param_head(context)
 
         # LSTM Initial States
-        h0 = torch.tanh(self.h_init(flat_features)).unsqueeze(0) # [1, B, H]
-        c0 = torch.tanh(self.c_init(flat_features)).unsqueeze(0) # [1, B, H]
+        h0 = torch.tanh(self.h_init(flat_features_with_embedd)).unsqueeze(0) # [1, B, H]
+        c0 = torch.tanh(self.c_init(flat_features_with_embedd)).unsqueeze(0) # [1, B, H]
 
         # Context Features for Attention (Reshaped: [B, H*W, C])
         attn_context_features = context.view(context.size(0), self.bottleneck_c, -1).transpose(1, 2)
 
         # Returns the predicted parameters and the context needed for the Sequence Decoding loop
-        return param_output, h0, c0, attn_context_features
+        return param_output, h0, c0, attn_context_features, projected_bert
 
 # %% --- LOSS FUNCTIONS ---
 def create_gaussian_heatmap(coords, resolution=64, sigma=0.02):
@@ -614,7 +619,7 @@ class SequenceLoss(nn.Module):
 
 # --- TEACHER FORCING DECODER HELPER ---
 
-def decode_lstm_sequence(model, h0, c0, context_features, target_coords):
+def decode_lstm_sequence(model, h0, c0, context_features, text_context, target_coords):
     """
     Decodes the sequence using Teacher Forcing (passing ground truth coordinates
     as input to the next time step).
@@ -647,7 +652,7 @@ def decode_lstm_sequence(model, h0, c0, context_features, target_coords):
         context_vector, _ = model.attention(context_features, hx) # [B, C]
 
         # 2. LSTM Input: Concatenate current coordinate and context vector
-        lstm_input = torch.cat([input_coord, context_vector], dim=1).unsqueeze(1) # [B, 1, 2+C]
+        lstm_input = torch.cat([input_coord, context_vector,text_context], dim=1).unsqueeze(1) # [B, 1, 2+C+H]
 
         # 3. LSTM Step: (h_t, c_t) = LSTM(input, (h_{t-1}, c_{t-1}))
         lstm_output, (hx_t, cx_t) = model.lstm(lstm_input, (hx.unsqueeze(0), cx.unsqueeze(0)))
@@ -764,10 +769,11 @@ lambda_seq_eos = 0.25    # Weight for EOS Loss (BCE)
 lambda_params = 10.0    # Weight for Transformation Parameter Loss (MSE) - Crucial for reconstruction
 seq_loss_res = 64
 seq_loss_sig = .025
+size_lang_hidden = 32
 
 # --- INSTANTIATE MODEL AND OPTIMIZER ---
 # Assuming BERT embeddings are 768 dim, matching StrokeGeneratorModel's default
-model = StrokeModel(img_length=input_img_size, depth=model_depth, max_stroke_len=stroke_len)
+model = StrokeModel(img_length=input_img_size, depth=model_depth, lang_hidden_size=size_lang_hidden ,max_stroke_len=stroke_len)
 optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
 # --- LOSS FUNCTIONS ---
@@ -801,13 +807,13 @@ for epoch in range(num_epochs):
         optimizer.zero_grad()
 
         # 2. Forward Pass (Encoder + Initial LSTM states)
-        pred_params, h0, c0, context_features = model(img_x, labels)
+        pred_params, h0, c0, context_features, text_context = model(img_x, labels)
 
         # 3. Parameter Loss (mu, S, theta components)
         loss_params = criterion_params(pred_params, target_params)
 
         # 4. Sequence Decoding (Teacher Forcing uses target_coords as input)
-        pred_coords, pred_eos_logits = decode_lstm_sequence(model, h0, c0, context_features, target_coords)
+        pred_coords, pred_eos_logits = decode_lstm_sequence(model, h0, c0, context_features,text_context, target_coords)
 
         # 5. Sequence Loss (Coordinate + EOS)
         loss_coord, loss_eos = criterion_sequence(pred_coords, pred_eos_logits, target_coords, target_eos)
@@ -841,8 +847,8 @@ for epoch in range(num_epochs):
             img_x = img_x.unsqueeze(1)
 
 
-            pred_params, h0, c0, context_features = model(img_x, labels)
-            pred_coords, pred_eos_logits = decode_lstm_sequence(model, h0, c0, context_features, target_coords)
+            pred_params, h0, c0, context_features, text_context = model(img_x, labels)
+            pred_coords, pred_eos_logits = decode_lstm_sequence(model, h0, c0, context_features,text_context, target_coords)
 
             loss_params = criterion_params(pred_params, target_params)
             loss_coord, loss_eos = criterion_sequence(pred_coords, pred_eos_logits, target_coords, target_eos)
@@ -928,7 +934,7 @@ o_img = (outputs > 0.5).squeeze().cpu().detach().float().numpy() * 255
 
 # %%
 @torch.no_grad()
-def inference_decode_stroke(model:StrokeModel, h0, c0, context_features, eos_threshold=0.5):
+def inference_decode_stroke(model:StrokeModel, h0, c0, context_features,text_context, eos_threshold=0.5):
     """
     Generates a normalized stroke sequence using the LSTM, feeding its own
     predicted coordinate back as input (autoregressive decoding).
@@ -953,7 +959,7 @@ def inference_decode_stroke(model:StrokeModel, h0, c0, context_features, eos_thr
         context_vector, _ = model.attention(context_features, hx) # [B, C]
 
         # 2. LSTM Input: Concatenate last predicted coordinate and context vector
-        lstm_input = torch.cat([input_coord, context_vector], dim=1).unsqueeze(1) # [B, 1, 2+C]
+        lstm_input = torch.cat([input_coord, context_vector,text_context], dim=1).unsqueeze(1) # [B, 1, 2+C+H]
 
         # 3. LSTM Step
         lstm_output, (hx_t, cx_t) = model.lstm(lstm_input, (hx.unsqueeze(0), cx.unsqueeze(0)))
@@ -1002,7 +1008,7 @@ def run_inference_walkthrough(model :StrokeModel, img_x, labels):
     # --- STEP 1: Run Encoder and Parameter Head ---
     print("Step 1/4: Running Encoder and Parameter Head...")
     # This gets the transformation parameters and the initial LSTM state
-    pred_params, h0, c0, context_features = model(img_x, labels)
+    pred_params, h0, c0, context_features, text_context = model(img_x, labels)
 
     # --- STEP 2: Sequence Decoding ---
     print("Step 2/4: Running Autoregressive Sequence Decoder...")
@@ -1014,6 +1020,7 @@ def run_inference_walkthrough(model :StrokeModel, img_x, labels):
         h0,
         c0,
         context_features,
+        text_context,
         eos_threshold=0.7 # Often a high threshold is needed for clean breaks
     )
 
@@ -1056,8 +1063,9 @@ def run_inference_walkthrough(model :StrokeModel, img_x, labels):
     return reconstructed_stroke, pred_params_np,padded_stroke_pred,eos_arr_pred
 
 # %% Test Inference
-force_label = 'apple'
-test_idx = 155
+# force_label = 'apple'
+force_label = 'cat'
+test_idx = 55
 for i,(img_x, labels, target_params, target_coords, target_eos) in enumerate(test_dataloader):
     if i>=test_idx:
         break
