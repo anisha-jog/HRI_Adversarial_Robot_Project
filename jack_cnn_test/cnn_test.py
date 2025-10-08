@@ -151,7 +151,7 @@ class ArtistModel(nn.Module):
 
         self.to(self.device)
 
-    @classmethod
+    @staticmethod
     def to_bw_img(img:torch.Tensor):
         return (img > 0.5).float() * 255
 
@@ -211,7 +211,6 @@ class ArtistModel(nn.Module):
         output_image = torch.sigmoid(self.out_conv(b))
 
         return output_image
-
 
 class TVLoss(nn.Module):
     """
@@ -289,35 +288,15 @@ train_set = PartialImageDataset(train_df)
 test_set = PartialImageDataset(test_df)
 train_dataloader = torch.utils.data.DataLoader(train_set, batch_size=batch_size, shuffle=True)
 test_dataloader = torch.utils.data.DataLoader(test_set, batch_size=batch_size)
-# %%
-test_idx = 100
-test_dd = dataset[test_idx:test_idx+2]
-test_dd
-# %%
-cv2.destroyAllWindows()
-# %%
-
-# device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-device = torch.device("cpu")
-model = ArtistModel(depth=3).to(device)
-
-batch_size = 2
-dummy_image = torch.randn(batch_size, 1, 256, 256).to(device)
-dummy_text_input = ["dog",] * batch_size
-
-
-output = model(dummy_image, dummy_text_input)
-print(output.shape)
-
-# %% Build Model
+# %% Build ArtistModel
 model_depth = 3
 learning_rate = 1e-3
 white_ratio = .95
 pos_weight_value = (1-white_ratio) / white_ratio
 num_epochs = 3
-lambda_bin = 0.001
-lambda_dice = 0.1  # Weight for Dice Loss (Good starting point: 0.05 to 0.2)
-lambda_tv = 0.01   # Weight for TV Loss (Start small: 0.005 to 0.05)
+lambda_bin = 0.01
+lambda_dice = 2  # Weight for Dice Loss (Good starting point: 0.05 to 0.2)
+lambda_tv = 1   # Weight for TV Loss (Start small: 0.005 to 0.05)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # device = torch.device("cpu")
 model = ArtistModel(depth=model_depth)
@@ -325,7 +304,7 @@ optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 criterion_bse = nn.BCEWithLogitsLoss(pos_weight=torch.tensor(pos_weight_value))
 criterion_dice = DiceLoss()
 criterion_tv = TVLoss(weight=1.0)
-# %% Train Model
+# %% Train ArtistModel
 for epoch in range(num_epochs):
     model.train()
     running_loss = 0.0
@@ -336,7 +315,7 @@ for epoch in range(num_epochs):
         outputs = model(partial_imgs, labels)
         loss_bce  = criterion_bse(outputs, next_strokes)
         loss_dice = criterion_dice(outputs, next_strokes)
-        loss_tv = criterion_tv(outputs, next_strokes)
+        loss_tv = criterion_tv(outputs)
         loss_binary = 4 * torch.mean(outputs * (1 - outputs))
         total_loss = loss_bce + lambda_bin * loss_binary + (lambda_dice * loss_dice) + (lambda_tv * loss_tv)
         total_loss.backward()
@@ -356,7 +335,7 @@ for epoch in range(num_epochs):
             outputs = model(partial_imgs, labels)
             loss_bce  = criterion_bse(outputs, next_strokes)
             loss_dice = criterion_dice(outputs, next_strokes)
-            loss_tv = criterion_tv(outputs, next_strokes)
+            loss_tv = criterion_tv(outputs)
             loss_binary = 4 * torch.mean(outputs * (1 - outputs))
             total_loss = loss_bce + lambda_bin * loss_binary + (lambda_dice * loss_dice) + (lambda_tv * loss_tv)
             val_loss += total_loss.item()
@@ -375,3 +354,6 @@ partial_imgs, labels, next_strokes =  next(iter(test_dataloader))
 partial_imgs = partial_imgs.unsqueeze(1).float().to(device) / 255.0 * 2 - 1
 next_strokes = next_strokes.unsqueeze(1).float().to(device) / 255.0 * 2 - 1
 outputs = model_test(partial_imgs, labels)
+partial_imgs, labels, next_strokes, s =  next(iter(test_dataloader))
+outputs = model(model.to_float_img(partial_imgs),labels)
+o_img = (outputs > 0.5).squeeze().cpu().detach().float().numpy() * 255
