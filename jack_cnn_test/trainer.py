@@ -3,9 +3,9 @@ import torch.nn as nn
 import time
 import os
 
-from .data_proccessing import build_doodle_dataset, to_device
-from .models import StrokeModel, save_model_weights_and_args, ArtistModel
-from .losses import SequenceLossSmoothed, DiceLoss, TVLoss, decode_lstm_sequence
+from data_proccessing import build_doodle_dataset, to_device
+from models import StrokeModel, save_model_weights_and_args, ArtistModel
+from losses import SequenceLossSmoothed, DiceLoss, TVLoss, decode_lstm_sequence
 
 def build_train_artist(train_dataloader,test_dataloader):
     # Build ArtistModel
@@ -67,7 +67,7 @@ def build_stroke_model(max_len,**kwargs):
     print(f"Model initialized on device: {model.device}")
     return model
 
-def train_stroke_model(model:StrokeModel,train_dataloader,test_dataloader,seq_loss_res, seq_loss_sig,lambda_seq_coord = 1.0,lambda_seq_eos = 0.25,lambda_params = 10.0 ,num_epochs:int=4,learning_rate=1e-4,save_model=True,report_rate=None):
+def train_stroke_model(model:StrokeModel,train_dataloader,test_dataloader,seq_loss_res=64, seq_loss_sig=0.025,lambda_seq_coord = 1.0,lambda_seq_eos = 0.25,lambda_params = 10.0 ,num_epochs:int=4,learning_rate=1e-4,save_model=True,report_rate=None):
     if save_model:
         print(f"Will save at {os.path.dirname(os.path.realpath(__file__))}/saved_models")
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
@@ -155,7 +155,7 @@ def train_stroke_model(model:StrokeModel,train_dataloader,test_dataloader,seq_lo
 def main(args=None):
     # subset_labels = ['apple', 'banana', 'bicycle', 'car', 'cat']
     subset_labels = ['apple', 'cat']
-    subsample_dataset_ratio = 0.1
+    subsample_dataset_ratio = 0.01
     train_test_split_ratio = .8
     batch_size = 4
     model_kwargs={'depth':4,'hidden_size':512,'lang_hidden_size':128,}
