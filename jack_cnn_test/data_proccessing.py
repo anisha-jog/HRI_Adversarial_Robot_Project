@@ -175,10 +175,10 @@ class PartialImageStrokeDataset(torch.utils.data.Dataset):
                 img = self.add_stroke_to_image(img, strokes[stroke_num])
             partial_img_data = img.copy().astype(np.float32)
             partial_img_label = self.raw_data['word'][sample_idx]
-            final_stroke = np.array(strokes[final_stroke_idx])
+            final_stroke = np.array(strokes[final_stroke_idx]).astype(np.float32)
             stroke_params, stroke_normed, stroke_eos = raw_stroke_to_normed(final_stroke,max_stroke_len=self.stroke_len)
 
-            return partial_img_data, partial_img_label, stroke_params, stroke_normed, stroke_eos
+            return partial_img_data, partial_img_label, stroke_params.astype(np.float32), stroke_normed, stroke_eos
 
 
 def build_doodle_dataset(batch_size=4,subsample_dataset_ratio=.1,train_test_split_ratio=.8,subset_labels=None,full_img_loader=False,split_seed=42):
