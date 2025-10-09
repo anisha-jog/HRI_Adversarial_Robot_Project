@@ -78,6 +78,7 @@ def train_stroke_model(model:StrokeModel,train_dataloader,test_dataloader,seq_lo
     criterion_params = nn.MSELoss()
     if report_rate is None:
         report_rate = int(len(train_dataloader)//10)
+    logging_str=""
     for epoch in range(num_epochs):
         model.train()
         running_loss = 0.0
@@ -119,8 +120,8 @@ def train_stroke_model(model:StrokeModel,train_dataloader,test_dataloader,seq_lo
             if (i) % report_rate == 0:
                 avg_loss = running_loss / report_rate
                 time_ = time.strftime("%H:%M:%S", time.localtime())
-                print(f"{time_} :: Epoch [{epoch+1}/{num_epochs}], Step [{i+1}/{len(train_dataloader)}], Loss: {avg_loss:.4f} "
-                    f"[P: {loss_params.item():.4f}, C: {loss_coord.item():.4f}, E: {loss_eos.item():.4f}]")
+                log_ = f"{time_} :: Epoch [{epoch+1}/{num_epochs}], Step [{i+1}/{len(train_dataloader)}], Loss: {avg_loss:.4f} [P: {loss_params.item():.4f}, C: {loss_coord.item():.4f}, E: {loss_eos.item():.4f}]"
+                print(log_); logging_str+=log_
                 running_loss = 0.0
 
         # --- Validation Loop ---
@@ -147,15 +148,16 @@ def train_stroke_model(model:StrokeModel,train_dataloader,test_dataloader,seq_lo
 
         val_loss /= len(test_dataloader)
         time_ = time.strftime("%H:%M:%S", time.localtime())
-        print(f"{time_} :: Epoch [{epoch+1}/{num_epochs}], Validation Loss: {val_loss:.4f}")
+        log_ = f"{time_} :: Epoch [{epoch+1}/{num_epochs}], Validation Loss: {val_loss:.4f}"
+        print(log_); logging_str+=log_
     if save_model:
-        save_model_weights_and_args(model,f"{os.path.dirname(os.path.realpath(__file__))}/saved_models/{time.strftime('%m%d_%H%M%S', time.localtime())}_artist_model.pth")
+        save_model_weights_and_args(model,f"{os.path.dirname(os.path.realpath(__file__))}/saved_models/{time.strftime('%m%d_%H%M%S', time.localtime())}_artist_model.pth",logs=logging_str)
     return model
 
 def main(args=None):
     # subset_labels = ['apple', 'banana', 'bicycle', 'car', 'cat']
     subset_labels = ['apple', 'cat']
-    subsample_dataset_ratio = 0.01
+    subsample_dataset_ratio = 0.75
     train_test_split_ratio = .8
     batch_size = 4
     model_kwargs={'depth':4,'hidden_size':512,'lang_hidden_size':128,}

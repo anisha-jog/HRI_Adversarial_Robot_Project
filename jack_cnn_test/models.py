@@ -6,10 +6,10 @@ import time
 
 from transformers import BertTokenizer, BertModel
 
-def save_model_weights_and_args(model,path):
+def save_model_weights_and_args(model,path,logs=None):
     # HACK
     arg_dict = {k: v for k, v in model.__dict__.items() if k[0] != '_' and k!='tokenizer'}
-    torch.save({'kargs': arg_dict,'model_state_dict': model.state_dict()}, path)
+    torch.save({'model_kargs': arg_dict,'model_state_dict': model.state_dict(),'logs':logs}, path)
 
 class ConvBlock(nn.Module):
     def __init__(self, in_channels, out_channels, dropout_rate=0.0):
