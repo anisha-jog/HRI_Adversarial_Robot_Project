@@ -7,6 +7,7 @@ import pandas as pd
 import json
 import cv2
 import matplotlib.pyplot as plt
+import time
 
 from transformers import BertTokenizer, BertModel
 from sklearn.model_selection import train_test_split
@@ -756,6 +757,7 @@ train_set = PartialImageStrokeDataset(train_df,max_stroke_len=stroke_len)
 test_set = PartialImageStrokeDataset(test_df,max_stroke_len=stroke_len)
 train_dataloader = torch.utils.data.DataLoader(train_set, batch_size=batch_size, shuffle=True)
 test_dataloader = torch.utils.data.DataLoader(test_set, batch_size=batch_size)
+print(f"Batch size: {batch_size}")
 print(f"Using subset labels: {subset_labels} and only {subsample_dataset_ratio*100}% of full dataset")
 print(f"Train-Test split is: {train_test_split_ratio}")
 # %% Build Stroke Model
@@ -793,6 +795,8 @@ print("Starting Training Loop (Image-to-Sequence)")
 # 5. target_eos:       [B, L] (1.0 at EOS, 0.0 otherwise)
 
 # %% Train Stroke Model
+report_rate = int(len(train_dataloader)//10)
+# report_rate = 100
 for epoch in range(num_epochs):
     model.train()
     running_loss = 0.0
@@ -831,9 +835,10 @@ for epoch in range(num_epochs):
 
         running_loss += total_loss.item()
 
-        if (i+1) % 100 == 0:
-            avg_loss = running_loss / 100
-            print(f"Epoch [{epoch+1}/{num_epochs}], Step [{i+1}/{len(train_dataloader)}], Loss: {avg_loss:.4f} "
+        if (i) % report_rate == 0:
+            avg_loss = running_loss / report_rate
+            time_ = time.strftime("%H:%M:%S", time.localtime())
+            print(f"{time_} :: Epoch [{epoch+1}/{num_epochs}], Step [{i+1}/{len(train_dataloader)}], Loss: {avg_loss:.4f} "
                   f"[P: {loss_params.item():.4f}, C: {loss_coord.item():.4f}, E: {loss_eos.item():.4f}]")
             running_loss = 0.0
 
@@ -860,7 +865,8 @@ for epoch in range(num_epochs):
             val_loss += total_loss.item()
 
     val_loss /= len(test_dataloader)
-    print(f"Epoch [{epoch+1}/{num_epochs}], Validation Loss: {val_loss:.4f}")
+    time_ = time.strftime("%H:%M:%S", time.localtime())
+    print(f"{time_} :: Epoch [{epoch+1}/{num_epochs}], Validation Loss: {val_loss:.4f}")
 
 # %% Build ArtistModel
 model_depth = 3
@@ -1065,7 +1071,7 @@ def run_inference_walkthrough(model :StrokeModel, img_x, labels):
 # %% Test Inference
 # force_label = 'apple'
 force_label = 'cat'
-test_idx = 55
+test_idx = 955
 for i,(img_x, labels, target_params, target_coords, target_eos) in enumerate(test_dataloader):
     if i>=test_idx:
         break
