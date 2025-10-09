@@ -67,7 +67,7 @@ def build_stroke_model(max_len,**kwargs):
     print(f"Model initialized on device: {model.device}")
     return model
 
-def train_stroke_model(model:StrokeModel,train_dataloader,test_dataloader,seq_loss_res=64, seq_loss_sig=0.025,lambda_seq_coord = 1.0,lambda_seq_eos = 0.25,lambda_params = 10.0 ,num_epochs:int=4,learning_rate=1e-4,save_model=True,report_rate=None):
+def train_stroke_model(model:StrokeModel,train_dataloader,test_dataloader,seq_loss_res=64, seq_loss_sig=0.025,lambda_seq_coord = 10.0,lambda_seq_eos = 0.25,lambda_params = .01 ,num_epochs:int=4,learning_rate=1e-4,save_model=True,report_rate=None):
     if save_model:
         print(f"Will save at {os.path.dirname(os.path.realpath(__file__))}/saved_models")
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
@@ -81,7 +81,7 @@ def train_stroke_model(model:StrokeModel,train_dataloader,test_dataloader,seq_lo
     logging_str=""
     for epoch in range(num_epochs):
         model.train()
-        running_loss = 0.0
+        running_loss = 0.0; running_p = 0.0; running_c = 0.0; running_e = 0.0
 
         # --- SIMULATED LOOP START (Replace with actual dataloader iteration) ---
         for i, batch in enumerate(train_dataloader):
@@ -115,14 +115,14 @@ def train_stroke_model(model:StrokeModel,train_dataloader,test_dataloader,seq_lo
             nn.utils.clip_grad_norm_(model.parameters(), max_norm=5.0)
             optimizer.step()
 
-            running_loss += total_loss.item()
+            running_loss += total_loss.item(); running_p += loss_params.item(); running_c += loss_coord.item(); running_e += loss_eos.item()
 
             if (i) % report_rate == 0:
-                avg_loss = running_loss / report_rate
+                if i>0: running_loss /= report_rate; running_p/=report_rate; running_c/=report_rate; running_e/=report_rate
                 time_ = time.strftime("%H:%M:%S", time.localtime())
-                log_ = f"{time_} :: Epoch [{epoch+1}/{num_epochs}], Step [{i+1}/{len(train_dataloader)}], Loss: {avg_loss:.4f} [P: {loss_params.item():.4f}, C: {loss_coord.item():.4f}, E: {loss_eos.item():.4f}]"
+                log_ = f"{time_} :: Epoch [{epoch+1}/{num_epochs}], Step [{i+1}/{len(train_dataloader)}], Loss: {running_loss:.4f} [P: {running_p:.4f}, C: {running_c:.4f}, E: {running_e:.4f}]"
                 print(log_); logging_str+=log_
-                running_loss = 0.0
+                running_loss = 0.0; running_p = 0.0; running_c = 0.0; running_e = 0.0
 
         # --- Validation Loop ---
         model.eval()
@@ -157,15 +157,16 @@ def train_stroke_model(model:StrokeModel,train_dataloader,test_dataloader,seq_lo
 def main(args=None):
     # subset_labels = ['apple', 'banana', 'bicycle', 'car', 'cat']
     subset_labels = ['apple', 'cat']
-    subsample_dataset_ratio = 0.75
+    subsample_dataset_ratio = 1.00
     train_test_split_ratio = .8
-    batch_size = 4
-    model_kwargs={'depth':4,'hidden_size':512,'lang_hidden_size':128,}
+    batch_size = 8
+    num_epochs = 8
+    model_kwargs={'depth':5,'hidden_size':1024,'lang_hidden_size':128,}
 
     train_loader, test_loader, max_len = build_doodle_dataset(batch_size,subsample_dataset_ratio=subsample_dataset_ratio,
                                                              train_test_split_ratio=train_test_split_ratio,subset_labels=subset_labels)
 
-    model = train_stroke_model(build_stroke_model(max_len,**model_kwargs),train_loader,test_loader)
+    model = train_stroke_model(build_stroke_model(max_len,**model_kwargs),train_loader,test_loader,num_epochs=num_epochs)
 
 
 
