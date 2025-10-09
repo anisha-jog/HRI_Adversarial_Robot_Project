@@ -97,7 +97,7 @@ def to_device(data, device):
         return {key: to_device(value, device) for key, value in data.items()}
     return data # Return non-tensor data as is
 
-def raw_stroke_to_normed(stroke:np.ndarray,max_stroke_len:int):
+def raw_stroke_to_normed(stroke:np.ndarray,max_stroke_len:int, image_size:int=256):
     stroke_swap = np.swapaxes(stroke,1,0).astype(dtype=np.float32)
     mu_arr = stroke_swap.mean(axis=0)
     dxdy = stroke_swap[-1] - stroke_swap[0]
@@ -117,29 +117,30 @@ def raw_stroke_to_normed(stroke:np.ndarray,max_stroke_len:int):
     eos_arr = np.zeros((max_stroke_len,),dtype=padded_stroke.dtype)
     eos_arr[stroke.shape[1]-1] += 1
 
-    params_arr = np.array([mu_arr[0], mu_arr[1], s, cos_theta, sin_theta])
+    params_arr = np.array([mu_arr[0]/image_size, mu_arr[1]/image_size, s/image_size, cos_theta, sin_theta])
 
     return params_arr, padded_stroke, eos_arr
 
-def transform_stroke(params_arr, padded_stroke, eos_arr):
+def transform_stroke(params_arr, padded_stroke, eos_arr,image_size=256):
     normed_stroke = padded_stroke[:int(np.where(eos_arr==1)[0][0])+1].copy()
-    normed_stroke *= params_arr[2]
+    normed_stroke *= (params_arr[2]*image_size)
     stroke = np.zeros_like(normed_stroke)
     # stroke[:,0] = params_arr[0] + normed_stroke[:,0] * params_arr[3] - normed_stroke[:,0] * params_arr[4]
     # stroke[:,1] = params_arr[1] - normed_stroke[:,0] * params_arr[4] + normed_stroke[:,0] * params_arr[3]
 
-    stroke[:,0] = params_arr[0] + (params_arr[3] * normed_stroke[:,0] - params_arr[4] * normed_stroke[:,1]) / (params_arr[3]**2 - params_arr[4]**2)
-    stroke[:,1] = params_arr[1] + (params_arr[4] * normed_stroke[:,0] - params_arr[3] * normed_stroke[:,1]) / (params_arr[4]**2 - params_arr[3]**2)
+    stroke[:,0] = params_arr[0]*image_size + (params_arr[3] * normed_stroke[:,0] - params_arr[4] * normed_stroke[:,1]) / (params_arr[3]**2 - params_arr[4]**2)
+    stroke[:,1] = params_arr[1]*image_size + (params_arr[4] * normed_stroke[:,0] - params_arr[3] * normed_stroke[:,1]) / (params_arr[4]**2 - params_arr[3]**2)
     return stroke
 
 class PartialImageStrokeDataset(torch.utils.data.Dataset):
-    def __init__(self, image_df : pd.DataFrame, max_stroke_len:int):
+    def __init__(self, image_df : pd.DataFrame, max_stroke_len:int, image_size=256):
         super().__init__()
         self.label_list = image_df['word'].unique().tolist()
         self.raw_data = image_df
         self.stroke_width = 1
         self.stroke_len = max_stroke_len
         self.cum_sum_strokes = []
+        self.image_size = image_size
         for drawing in (image_df['drawing']):
             strokes = json.loads(drawing)
             self.cum_sum_strokes.append(len(strokes)-1)
@@ -168,7 +169,7 @@ class PartialImageStrokeDataset(torch.utils.data.Dataset):
             return [self.__getitem__(i) for i in range(*idx.indices(len(self)))]
         else:
             sample_idx, final_stroke_idx = self.get_subidx(idx)
-            blank_img = np.full((256, 256),255, dtype = np.uint8)
+            blank_img = np.full((self.image_size, self.image_size),255, dtype = np.uint8)
             img = blank_img.copy()
             strokes = json.loads(self.raw_data['drawing'][sample_idx])
             for stroke_num in range(final_stroke_idx):
@@ -176,7 +177,7 @@ class PartialImageStrokeDataset(torch.utils.data.Dataset):
             partial_img_data = img.copy().astype(np.float32)
             partial_img_label = self.raw_data['word'][sample_idx]
             final_stroke = np.array(strokes[final_stroke_idx]).astype(np.float32)
-            stroke_params, stroke_normed, stroke_eos = raw_stroke_to_normed(final_stroke,max_stroke_len=self.stroke_len)
+            stroke_params, stroke_normed, stroke_eos = raw_stroke_to_normed(final_stroke,max_stroke_len=self.stroke_len,image_size=self.image_size)
 
             return partial_img_data, partial_img_label, stroke_params.astype(np.float32), stroke_normed, stroke_eos
 

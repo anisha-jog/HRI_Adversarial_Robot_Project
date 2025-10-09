@@ -209,9 +209,10 @@ class StrokeModel(nn.Module):
         # Note: Using sin/cos is better for regression than a raw angle theta
         # Input features: Flattened bottleneck features (bottleneck_c * 4*4 if last HxW=4)
         final_h_w = int(self.img_len // (2 ** self.depth))
+        total_init_size = self.bottleneck_c * final_h_w * final_h_w + self.embed_dim
         self.param_head = nn.Sequential(
             nn.Flatten(),
-            nn.Linear(self.bottleneck_c * final_h_w * final_h_w, hidden_size),
+            nn.Linear(total_init_size, hidden_size),
             nn.ReLU(inplace=True),
             nn.Linear(hidden_size, 5) # 5 outputs: mu_x, mu_y, S, cos(theta), sin(theta)
         )
@@ -221,8 +222,8 @@ class StrokeModel(nn.Module):
 
         # Initial hidden state (h0, c0) from bottleneck features
         # Bottleneck features are projected down to the size of the LSTM hidden state
-        self.h_init = nn.Linear(self.bottleneck_c * final_h_w * final_h_w + self.embed_dim, hidden_size)
-        self.c_init = nn.Linear(self.bottleneck_c * final_h_w * final_h_w + self.embed_dim, hidden_size)
+        self.h_init = nn.Linear(total_init_size, hidden_size)
+        self.c_init = nn.Linear(total_init_size, hidden_size)
 
         # Attention Mechanism (Context from bottleneck, Hidden from LSTM)
         self.attention = Attention(encoder_dim=self.bottleneck_c, decoder_dim=hidden_size)
@@ -278,7 +279,16 @@ class StrokeModel(nn.Module):
         # Parameter Head
         flat_features = context.view(context.size(0), -1)
         flat_features_with_embedd = torch.cat([flat_features, embedding_vector], dim=1)
-        param_output = self.param_head(context)
+        raw_params = self.param_head(flat_features_with_embedd)
+
+        # 4. APPLY BOUNDING ACTIVATIONS (CRITICAL STEP)
+        pred_params = torch.empty_like(raw_params)
+
+        # Indices 0, 1, 2 are Position (mu_x, mu_y) and Scale (S) -> Targets [0, 1] -> Sigmoid
+        pred_params[:, 0:3] = torch.sigmoid(raw_params[:, 0:3])
+
+        # Indices 3, 4 are Rotation (cos, sin) -> Targets [-1, 1] -> Tanh
+        pred_params[:, 3:5] = torch.tanh(raw_params[:, 3:5])
 
         # LSTM Initial States
         h0 = torch.tanh(self.h_init(flat_features_with_embedd)).unsqueeze(0) # [1, B, H]
@@ -288,4 +298,4 @@ class StrokeModel(nn.Module):
         attn_context_features = context.view(context.size(0), self.bottleneck_c, -1).transpose(1, 2)
 
         # Returns the predicted parameters and the context needed for the Sequence Decoding loop
-        return param_output, h0, c0, attn_context_features, projected_bert
+        return pred_params, h0, c0, attn_context_features, projected_bert
