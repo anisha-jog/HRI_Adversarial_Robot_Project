@@ -1,6 +1,3 @@
-# LetsDrawTogetherUR5: 
-Basic scripts written for Let's Draw Together study as part of Angelica Bonilla's and Lauren Kung's final project for Human-Robot Interaction. 
-
 This repository includes basic scripts for remote/TCP control of UR robots and the scripts and SVG files specifically used for our study. 
 
 This also serves as some sample code to help people who might want to control the UR5 robot from their computer using a very simple TCP server. 
@@ -18,4 +15,3 @@ This repo was programmed and managed by:
 
 Angelica Bonilla Fominaya 
 
-Carnegie Mellon University. 2022
