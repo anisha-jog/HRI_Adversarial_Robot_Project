@@ -10,6 +10,7 @@ RUN apt-get update && apt-get install -y \
     python3-opencv \
     python3-pip \
     python3-venv \
+    fish \
     git \
     && rm -rf /var/lib/apt/lists/*
 
@@ -25,11 +26,17 @@ RUN python3 -m venv $VENV_DIR
 RUN $VENV_DIR/bin/pip install --no-cache-dir \
     numpy
     # Add other Python packages here as needed (e.g., tensorflow, torch, etc.)
+
+
+    # RUN /opt/ros/jazzy/setup.bash && \
+#     # Use the provided command to register argcomplete functionality for fish
+#     register-python-argcomplete --shell fish ros2 | source
+
 # Copy custom entrypoint script
-COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+COPY ../entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
-# ENTRYPOINT ["entrypoint.sh"]
+# ENTRYPOINT ["../ros_entrypoint.sh"]
 
 # Default command: keeps the container running and ready for interactive use
 CMD ["bash"]
