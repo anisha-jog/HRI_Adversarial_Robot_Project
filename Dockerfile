@@ -11,6 +11,9 @@ RUN apt-get update && apt-get install -y \
     python3-pip \
     python3-venv \
     fish \
+    tmux \
+    net-tools \
+    iputils-ping \
     git \
     && rm -rf /var/lib/apt/lists/*
 
@@ -28,9 +31,10 @@ RUN $VENV_DIR/bin/pip install --no-cache-dir \
     # Add other Python packages here as needed (e.g., tensorflow, torch, etc.)
 
 
-    # RUN /opt/ros/jazzy/setup.bash && \
-#     # Use the provided command to register argcomplete functionality for fish
-#     register-python-argcomplete --shell fish ros2 | source
+RUN fish -c "curl -sL https://git.io/fisher | source && fisher install jorgebucaran/fisher"
+# RUN fish -c "fisher install edc/bass"
+# RUN fish -c "fisher install kpbaks/ros2.fish"
+
 
 # Copy custom entrypoint script
 COPY ../entrypoint.sh /usr/local/bin/entrypoint.sh

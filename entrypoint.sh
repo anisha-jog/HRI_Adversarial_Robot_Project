@@ -16,6 +16,8 @@ REQUESTED_SHELL=$(basename "$1")
 if [ "$REQUESTED_SHELL" = "fish" ]; then
     echo "Launching Fish shell with pre-configured ROS 2 environment..."
     # The 'ros2.fish' plugin (installed during build) handles sourcing on Fish startup.
+    fish -c "fisher install edc/bass"
+    fish -c "fisher install kpbaks/ros2.fish"
     exec "$@"
 
 elif [ "$REQUESTED_SHELL" = "bash" ]; then
