@@ -28,12 +28,13 @@ if __name__ == "__main__":
     file_time = time.strftime("%m%d%y_%H%M%S", time.localtime())
 
     # Possible prompts
-    full_prompt = """This is a partial drawing done by me. I need you to do three things
+    full_prompt = """This is a partial drawing done by me. I need you to do four things
         1. Make a guess on what is trying to be drawn
-        2. Propose a drawing subject that is diametrically opposite of your first answer
-        3. Send back the drawing with only a few strokes add so that the drawing is more similar to your answer to question 2
+        2. Propose a drawing subject that is somewhat unrelated to your first answer
+        3. Create a new transparent drawing with five or less new strokes that, when combined with the original drawing, produces a subject closer to your answer to number 2. Make sure to keep the strokes simple.
+        4. Do not change the original drawing. Instead, create a new drawing that is a copy of the original. Add each stroke from your answer to number 3 on top of the existing drawing without modifying existing strokes.
 
-        NOTE: make sure only minimal changes are made to the drawing also keep the strokes simple."""
+        """
     # Partial prompts
     predict_prompt = "This is a partial drawing done by me. Make a guess on what is trying to be drawn. NOTE: keep your response to just the answer and no additional words."
     opposite_prompt = "This is a partial drawing done by me. Propose a drawing subject that is diametrically opposite of the drawing. NOTE: keep your response to just the answer and no additional words."
@@ -41,9 +42,9 @@ if __name__ == "__main__":
                     NOTE: make sure only minimal changes are made to the drawing also keep the strokes simple."""
 
     # Initialize the Gemini client
-    with open(".config_files/gemini-api.txt") as f:
-        GOOGLE_API_KEY = f.read().strip()
-    client = genai.Client(api_key=GOOGLE_API_KEY)
+    # with open(".config_files/gemini-api.txt") as f:
+    #     GOOGLE_API_KEY = f.read().strip()
+    client = genai.Client()
 
     scratch_pad = np.full((1024, 1024, 3),255, dtype = np.uint8)
 
