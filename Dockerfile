@@ -14,6 +14,7 @@ RUN apt-get update && apt-get install -y \
     tmux \
     net-tools \
     iputils-ping \
+    dos2unix \
     git \
     && rm -rf /var/lib/apt/lists/*
 
@@ -38,6 +39,7 @@ RUN fish -c "curl -sL https://git.io/fisher | source && fisher install jorgebuca
 
 # Copy custom entrypoint script
 COPY ../entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN dos2unix /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 # ENTRYPOINT ["../ros_entrypoint.sh"]
