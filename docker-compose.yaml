@@ -1,0 +1,63 @@
+services:
+  ur5_ros2_jazzy:
+    # Build the image from the Dockerfile in the current directory
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    # Give the container a friendly name
+    container_name: ur5_jazzy_dev
+
+    # Mount your local workspace into the container for easy development
+    # Uncomment and replace '/path/to/your/ros2_ws' with your host workspace path
+    volumes:
+      - ./ros2_ws:/ros2_ws
+
+    # Essential for ROS 2 DDS/Discovery to work across a network (e.g., to a real robot or URSim)
+    # This also helps with running GUI applications if using the 'jazzy-desktop' base
+    # network_mode: "host"
+    networks:
+      ur5_net:
+      # ur5_macvlan_net:
+        # Assign a static IP for the container within the new subnet
+        # NOTE: This IP must be unused on your LAN!
+        ipv4_address: 192.168.56.10
+    ports:
+      - "50001:50001"
+      - "50002:50002"
+      - "50003:50003"
+
+    # Environment variables for ROS 2 and potential URSim/Robot connection
+    environment:
+      # Optional: set ROS domain ID for network isolation
+      - ROS_DOMAIN_ID=42
+      # Environment variables for GUI to work (for RViz/Gazebo, if using the desktop image)
+      - QT_X11_NO_MITSHM=1
+      - DISPLAY=$DISPLAY
+      - RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+      - CYCLONEDDS_URI=/ros2_ws/cyclonedds.xml
+
+    # Pass necessary devices for real-time and network access, especially if connecting to a real robot or URSim on a fixed IP
+    # privileged: true # Uncomment if you encounter permission issues
+
+    # Command to run after the entrypoint, keeping the container open
+    command: "bash"
+    group_add:
+      - 20 #<dialout_gid>
+      - 1001 #<docker_gid>
+      - 107 #<input_gid>
+      - 44 #<video_gid>
+      - 110 #<render_gid>
+
+    # Restart policy
+    # restart: "unless-stopped"
+
+
+networks:
+  ur5_net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 192.168.56.0/24
+  # ur5_macvlan_net:
+  #   external: true
