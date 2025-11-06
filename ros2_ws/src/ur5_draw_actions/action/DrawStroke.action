@@ -1,0 +1,8 @@
+int16[] x
+int16[] y
+---
+string success
+---
+int16 stroke_idx
+int16 stroke_length
+string status
