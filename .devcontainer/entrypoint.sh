@@ -17,15 +17,19 @@ if [ "$REQUESTED_SHELL" = "fish" ]; then
     echo "Launching Fish shell with pre-configured ROS 2 environment..."
     # The 'ros2.fish' plugin (installed during build) handles sourcing on Fish startup.
     fish -c "fisher install edc/bass"
-    fish -c "fisher install kpbaks/ros2.fish"
+    # fish -c "fisher install kpbaks/ros2.fish"
+    # sed -i '1s/^/#/' ~/.config/fish/conf.d/ros2.fish
+    source /opt/ros/humble/setup.bash
+    source /ros2_ws/install/setup.bash
+    #  fisher install kpbaks/ros2.fish && sed -i '1s/^/#/' ~/.config/fish/conf.d/ros2.fish
     exec "$@"
 
 elif [ "$REQUESTED_SHELL" = "bash" ]; then
     echo "Launching Bash shell with sourced ROS 2 environment..."
 
     # Manually source ROS 2 for the bash session
-    if [ -f "/opt/ros/jazzy/setup.bash" ]; then
-        source /opt/ros/jazzy/setup.bash
+    if [ -f "/opt/ros/humble/setup.bash" ]; then
+        source /opt/ros/humble/setup.bash
     fi
 
     # Execute the command passed to the container for bash
