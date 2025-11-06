@@ -1,7 +1,7 @@
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, OpaqueFunction
 from launch.conditions import IfCondition, UnlessCondition
-from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, TextSubstitution
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 
@@ -11,6 +11,8 @@ def generate_launch_description():
     enable_sim = LaunchConfiguration('enable_sim')
     robot_ip = LaunchConfiguration('robot_ip')
     ur_type = LaunchConfiguration('ur_type')
+    x_offset = LaunchConfiguration('x_offset')
+    y_offset = LaunchConfiguration('y_offset')
 
     # Argument to switch between real robot and simulation
     enable_sim_arg = DeclareLaunchArgument(
@@ -19,6 +21,16 @@ def generate_launch_description():
         description='Set to true to launch in simulation mode (using fake hardware) or false for real robot.',
     )
 
+    set_x_offset = DeclareLaunchArgument(
+        'x_offset',
+        default_value='0.5',
+        description='image frame x offset from base_link frame',
+    )
+    set_y_offset = DeclareLaunchArgument(
+        'y_offset',
+        default_value='-0.5',
+        description='image frame y offset from base_link frame',
+    )
     # Robot IP (only needed when enable_sim is false)
     robot_ip_arg = DeclareLaunchArgument(
         'robot_ip',
@@ -69,15 +81,32 @@ def generate_launch_description():
         'ur_sim_control.launch.py'
     ])
     ur_driver_sim = IncludeLaunchDescription(
-        ur_sim_launch,
-        condition=IfCondition(enable_sim),
-        launch_arguments={
-            'ur_type': ur_type,
-            # 'gazebo_gui': 'false',
-            # 'launch_rviz': 'true'
-        }.items(),
+            ur_sim_launch,
+            condition=IfCondition(enable_sim),
+            launch_arguments={
+                'ur_type': ur_type,
+                'gazebo_gui': 'false',
+            }.items(),
     )
 
+    static_img_frame_pub = Node(
+                package='tf2_ros',
+                executable='static_transform_publisher',
+                arguments=[
+                    '--x', x_offset, '--y', y_offset, '--z', '0',
+                    '--yaw', '0', '--pitch', '0', '--roll',
+                    '0', '--frame-id', 'base_link', '--child-frame-id', 'image_frame']
+            )
+
+    static_pen_frame_pub = Node(
+                package='tf2_ros',
+                executable='static_transform_publisher',
+                arguments=[
+                    # TODO adjust these values based on our setup
+                    '--x', '0.02', '--y', '0', '--z', '0.01',
+                    '--yaw', '0', '--pitch', '-1.57725', '--roll',
+                    '0', '--frame-id', 'tool0', '--child-frame-id', 'pen_frame']
+            )
     # This node needs to be built and installed via your package's setup.py
     # We assume this node is in a package named 'my_ur5_control'
     # moveit_position_sender_node = Node(
@@ -95,6 +124,10 @@ def generate_launch_description():
         enable_sim_arg,
         robot_ip_arg,
         ur_type_arg,
+        set_x_offset,
+        set_y_offset,
+        static_img_frame_pub,
+        static_pen_frame_pub,
 
         # Launches the appropriate UR driver setup
         ur_driver_real,
