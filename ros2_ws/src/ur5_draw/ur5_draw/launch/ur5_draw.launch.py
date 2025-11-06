@@ -8,6 +8,9 @@ from launch_ros.substitutions import FindPackageShare
 
 def generate_launch_description():
     # 1. Launch Arguments
+    enable_sim = LaunchConfiguration('enable_sim')
+    robot_ip = LaunchConfiguration('robot_ip')
+    ur_type = LaunchConfiguration('ur_type')
 
     # Argument to switch between real robot and simulation
     enable_sim_arg = DeclareLaunchArgument(
@@ -30,10 +33,6 @@ def generate_launch_description():
         description='The type of UR robot (e.g., ur5, ur10).',
     )
 
-    # 2. Subsystem Definitions
-    enable_sim = LaunchConfiguration('enable_sim')
-    robot_ip = LaunchConfiguration('robot_ip')
-    ur_type = LaunchConfiguration('ur_type')
 
     # Find the UR Driver package share directory
     ur_driver_pkg = FindPackageShare('ur_robot_driver')
@@ -47,7 +46,7 @@ def generate_launch_description():
         'ur_control.launch.py'
     ])
 
-    # 3. Conditional Launch for UR Driver (Real Hardware)
+    # Conditional Launch for UR Driver (Real Hardware)
     # When enable_sim is false, use the provided robot_ip
     ur_driver_real = IncludeLaunchDescription(
         ur_control_launch,
@@ -62,33 +61,34 @@ def generate_launch_description():
         }.items(),
     )
 
-    # 4. Conditional Launch for UR Driver (Simulation/Fake Hardware)
+    # Conditional Launch for UR Driver (Simulation/Fake Hardware)
     # When enable_sim is true, set use_fake_hardware to true
+    ur_sim_launch = PathJoinSubstitution([
+        FindPackageShare('ur_simulation_gz'),
+        'launch',
+        'ur_sim_control.launch.py'
+    ])
     ur_driver_sim = IncludeLaunchDescription(
-        ur_control_launch,
+        ur_sim_launch,
         condition=IfCondition(enable_sim),
         launch_arguments={
             'ur_type': ur_type,
-            'robot_ip': 'yyy.yyy.yyy.yyy', # Placeholder, not used by fake hardware
-            'use_fake_hardware': 'true',
-            'headless_mode': 'true',
-            'use_sim_time': 'true', # Important for simulation
-            'launch_rviz': 'true'
+            # 'gazebo_gui': 'false',
+            # 'launch_rviz': 'true'
         }.items(),
     )
 
-    # 5. Custom Action Client Node
     # This node needs to be built and installed via your package's setup.py
     # We assume this node is in a package named 'my_ur5_control'
-    moveit_position_sender_node = Node(
-        package='my_ur5_control', # Replace with your package name
-        executable='moveit_position_client',
-        name='moveit_position_client',
-        output='screen',
-        parameters=[
-            {'use_sim_time': enable_sim} # Use sim time if simulation is enabled
-        ]
-    )
+    # moveit_position_sender_node = Node(
+    #     package='my_ur5_control', # Replace with your package name
+    #     executable='moveit_position_client',
+    #     name='moveit_position_client',
+    #     output='screen',
+    #     parameters=[
+    #         {'use_sim_time': enable_sim} # Use sim time if simulation is enabled
+    #     ]
+    # )
 
 
     return LaunchDescription([
@@ -101,5 +101,5 @@ def generate_launch_description():
         ur_driver_sim,
 
         # Launches your custom node
-        moveit_position_sender_node,
+        # moveit_position_sender_node,
     ])
