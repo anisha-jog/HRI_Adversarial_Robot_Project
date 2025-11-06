@@ -1,0 +1,5 @@
+Text Output: 1. My guess is that you are trying to draw an "X".
+2. I propose drawing a pair of scissors.
+3. I will add two curved lines and two smaller straight lines to represent the blades and handles of scissors.
+4.Image Output: Found image with mime type image/png
+Ratio of image kept the same: 0.98

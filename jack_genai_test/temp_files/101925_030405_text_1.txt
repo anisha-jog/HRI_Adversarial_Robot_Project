@@ -1,0 +1,8 @@
+Text Output: 1. This looks like a rudimentary drawing of a house with a fence.
+
+2. I propose the drawing subject should become a stylized, abstract birdhouse.
+
+3. I will add three simple curved lines to suggest a round opening and a small perch.
+
+4. I will now create the new drawing with the added strokes.Image Output: Found image with mime type image/png
+Ratio of image kept the same: 0.91

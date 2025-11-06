@@ -1,0 +1,4 @@
+Text Output: 1. This looks like it might be the outline of an apple.
+2. How about a simple ghost?
+3. I will create a new transparent drawing with a rounded top and two oval eyes, which, when combined with your original drawing, could suggest a ghost floating above the ground.Image Output: Found image with mime type image/pngText Output: 4. I will now create a copy of your original drawing and combine it with the ghost drawing using a normal blend.Image Output: Found image with mime type image/png
+Ratio of image kept the same: 0.30

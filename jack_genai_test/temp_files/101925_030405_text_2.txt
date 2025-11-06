@@ -1,0 +1,8 @@
+Text Output: 1. The drawing appears to be the outline of a birdhouse with a bird perched on its roof and a small fence-like structure nearby.
+
+2. I propose a drawing of a simple house with a chimney.
+
+3. To transform the original drawing into a simple house with a chimney using five or fewer new strokes, I will add a rectangular base below the birdhouse to represent the lower part of the house, and two diagonal lines converging to form a small chimney on the roof.
+
+4.Image Output: Found image with mime type image/png
+Ratio of image kept the same: 0.96

@@ -1,0 +1,6 @@
+Text Output: My guess is that you were drawing a jellyfish with a small mushroom or anemone nearby on the ocean floor.
+
+An extremely unrelated drawing subject would be a simple cartoon-style robot standing on a grassy field.
+
+I will now add a few simple strokes to your drawing to make it resemble a robot more closely, without removing any existing lines.Image Output: Found image with mime type image/png
+Ratio of image kept the same: 0.97

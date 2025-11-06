@@ -1,0 +1,4 @@
+Text Output: 1. My guess is that you were trying to draw a lightbulb.
+2. I propose we try to draw an apple.
+3. I will add a curved line at the top to suggest the shape of an apple and a small stem.Image Output: Found image with mime type image/pngText Output: 4.
+Ratio of image kept the same: 0.96

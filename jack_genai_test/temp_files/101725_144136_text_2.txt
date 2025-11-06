@@ -1,0 +1,2 @@
+Text Output: It looks like you were trying to draw a broken heart. A diametrically opposite subject could be a whole, healthy heart. I will now add a few simple strokes to your drawing to make it resemble a whole heart more closely.Image Output: Found image with mime type image/png
+Ratio of image kept the same: 1.00

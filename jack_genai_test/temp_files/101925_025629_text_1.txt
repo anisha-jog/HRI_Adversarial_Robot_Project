@@ -1,0 +1,4 @@
+Text Output: 1. My guess is that you were trying to draw an apple with a leaf behind it.
+2. I propose drawing a lightbulb.
+3. I will add a curved line at the bottom to suggest the base of the bulb and two short, wavy lines extending upwards from the sides to represent the glass.Image Output: Found image with mime type image/png
+Ratio of image kept the same: 0.91

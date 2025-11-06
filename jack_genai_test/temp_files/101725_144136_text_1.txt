@@ -1,0 +1,4 @@
+Text Output: 1. My guess is that you were trying to draw a broken heart.
+2. A drawing subject that is diametrically opposite of a broken heart would be a whole, intact heart.
+3. I will add a few simple strokes to connect the two halves of the broken heart, making it appear whole.Image Output: Found image with mime type image/png
+Ratio of image kept the same: 0.98

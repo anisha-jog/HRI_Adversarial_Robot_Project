@@ -1,0 +1,6 @@
+Text Output: This looks like a minimalist line drawing of a face in profile with closed eyes.
+
+Let's try drawing a simple sailboat.
+
+Here is the original drawing with three new strokes to suggest a sailboat: a curved line for the boat's hull, a vertical line for the mast, and a triangular shape for the sail.Image Output: Found image with mime type image/pngText Output: Image Output: Found image with mime type image/png
+Ratio of image kept the same: 0.91

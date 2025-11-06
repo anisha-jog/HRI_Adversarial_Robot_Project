@@ -1,0 +1,4 @@
+Text Output: 1. This looks like someone is trying to draw a star.
+2. I propose drawing a fish.
+3. I will create a new transparent drawing with simple curved lines to suggest a fish's body and tail.Image Output: Found image with mime type image/pngText Output: 4. I will now add the strokes from the previous step to a copy of your original star drawing.Image Output: Found image with mime type image/png
+Ratio of image kept the same: 0.91

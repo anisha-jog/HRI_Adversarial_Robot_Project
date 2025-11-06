@@ -1,0 +1,5 @@
+Text Output: 1. This looks like a pair of open scissors.
+2. I propose drawing a butterfly.
+3. I will add a curved line extending from each scissor handle to suggest wings and two small antennae at the top.
+4.Image Output: Found image with mime type image/png
+Ratio of image kept the same: 0.93

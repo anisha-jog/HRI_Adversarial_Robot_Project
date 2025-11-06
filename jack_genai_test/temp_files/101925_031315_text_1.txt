@@ -1,0 +1,4 @@
+Text Output: This appears to be the start of a drawing of a ghost with a surprised expression.
+
+Let's try turning this into a simple flower. I will add a stem and a couple of leaves.Image Output: Found image with mime type image/pngText Output: Now, I will combine the original drawing with the flower additions using a normal blend.Image Output: Found image with mime type image/png
+Ratio of image kept the same: 0.58

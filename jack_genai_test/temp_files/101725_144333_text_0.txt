@@ -1,0 +1,4 @@
+Text Output: 1. This looks like the start of a stick figure drawing of a person standing or gesturing.
+2. A diametrically opposite subject could be a static, inanimate object, such as a simple square or a box sitting on the ground.
+3. I will now add a few strokes to the existing drawing to make it resemble a simple box.Image Output: Found image with mime type image/png
+Ratio of image kept the same: 0.95

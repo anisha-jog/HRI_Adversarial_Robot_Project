@@ -1,0 +1,6 @@
+Text Output: 1. My guess is that you were trying to draw a stylized flower with a somewhat sad or surprised expression.
+
+2. I propose drawing a stylized cartoon ghost.
+
+3. I will create a new transparent drawing with a few simple strokes to make the combined image look more like a ghost.Image Output: Found image with mime type image/pngText Output: 4. I will now combine a copy of your original drawing with the new strokes using a normal blend.Image Output: Found image with mime type image/png
+Ratio of image kept the same: 0.65

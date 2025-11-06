@@ -1,0 +1,4 @@
+Text Output: 1. This looks like a watermelon.
+2. How about an eye?
+3. I will add simple strokes to make the drawing resemble an eye, keeping all the original lines.Image Output: Found image with mime type image/png
+Ratio of image kept the same: 0.95

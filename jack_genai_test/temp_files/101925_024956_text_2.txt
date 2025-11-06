@@ -1,0 +1,4 @@
+Text Output: 1. My guess is that the drawing is trying to depict a bee on a flower.
+2. I propose drawing a snail.
+3. I will add a curved line suggesting a shell on the back of the bee-like figure.Image Output: Found image with mime type image/png
+Ratio of image kept the same: 0.96

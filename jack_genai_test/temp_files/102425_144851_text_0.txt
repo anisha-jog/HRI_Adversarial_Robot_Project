@@ -1,0 +1,6 @@
+Text Output: 1.  This looks like a drawing of a bird in flight, possibly a swan or a similar bird with a long neck.
+
+2.  I propose drawing a butterfly.
+
+3.  I will create a transparent drawing with three simple curved strokes to suggest the wings of a butterfly, which, when overlaid on your original drawing, might give the impression of a butterfly's body and wings.Image Output: Found image with mime type image/pngText Output: 4.  I will now create a copy of your original drawing and add the three butterfly wing strokes on top.Image Output: Found image with mime type image/png
+Ratio of image kept the same: 0.94
