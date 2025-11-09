@@ -23,12 +23,12 @@ def generate_launch_description():
 
     set_x_offset = DeclareLaunchArgument(
         'x_offset',
-        default_value='0.5',
+        default_value='0.25',
         description='image frame x offset from base_link frame',
     )
     set_y_offset = DeclareLaunchArgument(
         'y_offset',
-        default_value='-0.5',
+        default_value='-0.25',
         description='image frame y offset from base_link frame',
     )
     # Robot IP (only needed when enable_sim is false)
@@ -120,6 +120,18 @@ def generate_launch_description():
                     '--yaw', '0', '--pitch', '-1.57725', '--roll',
                     '0', '--frame-id', 'tool0', '--child-frame-id', 'pen_frame']
             )
+
+    moveit_service = Node(
+        package="ur_draw_cmake",
+        executable="moveit_service",
+        name="moveit_service",
+        output="screen",
+        # parameters=[
+        #     robot_description,
+        #     robot_description_semantic,
+        # ],
+    )
+
     # This node needs to be built and installed via your package's setup.py
     # We assume this node is in a package named 'my_ur5_control'
     # moveit_position_sender_node = Node(
@@ -146,6 +158,7 @@ def generate_launch_description():
         set_y_offset,
         static_img_frame_pub,
         static_pen_frame_pub,
+        moveit_service,
 
         # Launches the appropriate UR driver setup
         ur_driver_real,
