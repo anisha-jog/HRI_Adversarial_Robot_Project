@@ -3,10 +3,6 @@
 import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import Pose
-from moveit_msgs.msg import MoveItErrorCodes
-import sys
-import copy
-import time
 
 from ur_draw_cmake.srv import MoveToPose
 

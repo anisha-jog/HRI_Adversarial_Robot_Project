@@ -31,6 +31,9 @@ void handle_pose_service(
     // Create the MoveIt MoveGroup Interface
     auto move_group_interface = MoveGroupInterface(node, PLANNING_GROUP);
 
+    const std::string planning_frame = move_group_interface.getPlanningFrame();
+    RCLCPP_INFO(logger, "MoveGroup planning frame: %s", planning_frame.c_str());
+
     // Set the target Pose from the service request
     move_group_interface.setPoseTarget(target_pose);
 
