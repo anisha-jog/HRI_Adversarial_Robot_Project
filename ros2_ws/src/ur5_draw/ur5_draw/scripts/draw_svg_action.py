@@ -1,106 +1,139 @@
+#!/usr/bin/env python3
 import sys
 import rclpy
 from rclpy.node import Node
 from rclpy.action import ActionServer
 from rclpy.callback_groups import ReentrantCallbackGroup
-from ur5_draw_actions.action import DrawStroke
-from geometry_msgs.msg import Pose
-from tf2_ros import TransformListener, Buffer
+from geometry_msgs.msg import Pose, Point
+from visualization_msgs.msg import Marker
+# from tf2_ros import TransformListener, Buffer, TransformException
+from tf2_ros import TransformException
+from tf2_ros.buffer import Buffer
+from tf2_ros.transform_listener import TransformListener
+from tf2_geometry_msgs import do_transform_pose
+
 import numpy as np
 
-import moveit_commander
-import moveit_msgs.msg
+from ur_draw_cmake.srv import MoveToPose
 
+HOME_POSE = Pose(position=Point(x=0.0, y=0.0, z=0.5))
+TEST_STROKE = [
+    (0.1, 0.1),
+    (0.1, 0.2),
+    (0.2, 0.2),
+    (0.2, 0.1),
+    (0.1, 0.1),
+]
 
-
-class DrawSVGAction(Node):
+class DrawSVG(Node):
     def __init__(self):
-        super().__init__('draw_svg_action')
-
-        # Create callback group for action server
-        self.callback_group = ReentrantCallbackGroup()
-
-        # Create action server
-        self._action_server = ActionServer(
-            self,
-            DrawStroke,
-            'draw_svg',
-            self.execute_callback,
-            callback_group=self.callback_group
-        )
-
-        # Publisher for robot commands (you'll need to modify this based on your UR5 setup)
-        self.robot_command_pub = self.create_publisher(
-            Pose,
-            '/ur5/command_pose',
-            10
-        )
-
-        # TF listener for coordinate transformations
+        super().__init__('draw_svg')
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self)
+        self.client = self.create_client(MoveToPose, 'moveit_to_pose')
+        while not self.client.wait_for_service(timeout_sec=1.0):
+            self.get_logger().info('Service not available, waiting again...')
+        self.request = MoveToPose.Request()
 
-        self.get_logger().info('Draw SVG Action Server has started')
+        self.image_to_world_t = self.get_img_transform('image_frame', 'world')
+        self.get_logger().info('Transform successfully retrieved and cached.')
+        self.img_viz_pub = self.create_publisher(Marker, 'image_viz', 10)
+        self.img_viz = Marker()
+        self.img_viz.header.frame_id = 'world'
+        self.img_viz.type = Marker.LINE_STRIP
+        self.img_viz.scale.x = 0.002
+        self.img_viz.color.a = 1.0
+        self.img_viz.color.r = 1.0
+        self.img_viz.points = [] # May need to set a starting point
 
-    async def execute_callback(self, goal_handle):
-        self.get_logger().info('Executing drawing action...')
+    def get_img_transform(self, source_frame, target_frame):
+        wait_duration_sec = 5.0
+        start_time = self.get_clock().now()
+        transform_available = False
 
-        feedback_msg = DrawSVG.Feedback()
-        result = DrawSVG.Result()
+        while rclpy.ok() and (self.get_clock().now() - start_time).nanoseconds / 1e9 < wait_duration_sec:
+            if self.tf_buffer.can_transform(target_frame, source_frame, rclpy.time.Time()):
+                self.get_logger().info('Transform available!')
+                transform_available = True
+                break
 
+            # Spin the node once to allow the TransformListener to process incoming TF messages
+            rclpy.spin_once(self, timeout_sec=0.1)
+
+        if not transform_available:
+             self.get_logger().error(f"Failed to find transform between {source_frame} and {target_frame} within {wait_duration_sec}s.")
+             # Exit the node setup gracefully or raise an error
+             sys.exit(1)
+
+        # Now that we know the transform exists, we can perform the lookup (with a short timeout)
         try:
-            # Get coordinates from goal
-            coords = goal_handle.request.coordinates
+            return self.tf_buffer.lookup_transform(
+                target_frame,
+                source_frame,
+                rclpy.time.Time(),
+                rclpy.duration.Duration(seconds=0.1) # Short timeout since we just confirmed it exists
+            )
 
-            # Process each coordinate
-            for i, coord in enumerate(coords):
-                # Convert image coordinates to robot coordinates
-                robot_pose = self.image_to_robot_coords(coord.x, coord.y)
+        except TransformException as ex:
+             # Should not happen if can_transform passed, but good practice to catch it
+             self.get_logger().error(f"Transform lookup failed after waiting: {ex}")
+             sys.exit(1)
 
-                # Send command to robot
-                self.robot_command_pub.publish(robot_pose)
+    def go_home(self):
+        home_pose_world = do_transform_pose(HOME_POSE, self.image_to_world_t)
+        future = self.send_request(home_pose_world)
+        rclpy.spin_until_future_complete(self, future)
+        if future.result() is not None:
+            self.get_logger().info("Returned to home position successfully.")
+        else:
+            self.get_logger().error("Service call to return home failed.")
 
-                # Update feedback
-                feedback_msg.current_point = i
-                goal_handle.publish_feedback(feedback_msg)
+    def send_request(self, pose):
+        self.request.target_pose = pose
+        self.get_logger().info("Sending request to move to the target pose...")
+        return self.client.call_async(self.request)
 
-                # Add small delay for robot movement
-                await rclpy.sleep(0.1)
+    def draw_point(self, x, y):
+        img_pose = Pose()
+        img_pose.position.x = x
+        img_pose.position.y = y
+        img_pose.position.z = 0.0
+        img_pose.orientation.w = 1.0 # Example orientation (identity quaternion, no rotation)
 
-            goal_handle.succeed()
-            result.success = True
-            return result
+        world_pose = do_transform_pose(img_pose, self.image_to_world_t)
 
-        except Exception as e:
-            self.get_logger().error(f'Failed to execute drawing action: {str(e)}')
-            goal_handle.abort()
-            result.success = False
-            return result
+        future = self.send_request(world_pose)
+        rclpy.spin_until_future_complete(self, future)
+        if future.result() is not None:
+            self.get_logger().info("Move completed successfully.")
+        else:
+            self.get_logger().error("Service call failed.")
 
-    def image_to_robot_coords(self, image_x, image_y):
-        # TODO: Implement coordinate transformation from image frame to robot frame
-        # This will depend on your specific setup and calibration
-        robot_pose = Pose()
-        # Add transformation logic here
-        return robot_pose
+        self.img_viz.points.append(world_pose.position)
+        self.img_viz.header.stamp = self.get_clock().now().to_msg()
+        self.img_viz_pub.publish(self.img_viz)
 
-class DrawPointTest(Node):
-    def __init__():
-        super().__init__('draw_point')
-        moveit_commander.roscpp_initialize
+    def draw_stroke(self, points):
+        for point in points:
+            self.draw_point(point[0], point[1])
+        self.go_home()
+
+
 
 
 def main(args=None):
     rclpy.init(args=args)
 
-    draw_svg_action = DrawSVGAction()
+    draw_svg_node = DrawSVG()
 
     try:
-        rclpy.spin(draw_svg_action)
+        draw_svg_node.go_home()
+        draw_svg_node.draw_stroke(TEST_STROKE)
+        # rclpy.spin(draw_svg_node)
     except KeyboardInterrupt:
         pass
     finally:
-        draw_svg_action.destroy_node()
+        draw_svg_node.destroy_node()
         rclpy.shutdown()
 
 if __name__ == '__main__':
