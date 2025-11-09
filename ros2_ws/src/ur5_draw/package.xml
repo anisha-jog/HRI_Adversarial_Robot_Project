@@ -7,6 +7,9 @@
   <maintainer email="jmirenzi717@gmail.com">root</maintainer>
   <license>TODO: License declaration</license>
 
+  <depend>rclpy</depend>
+  <depend>ur_draw_cmake</depend>
+
   <exec_depend>ros2launch</exec_depend>
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>

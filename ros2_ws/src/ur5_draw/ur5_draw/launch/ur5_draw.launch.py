@@ -69,7 +69,8 @@ def generate_launch_description():
             'use_fake_hardware': 'false',
             'headless_mode': 'true',
             'use_sim_time': 'false', # Important for real robot
-            'launch_rviz': 'true'
+            'initial_joint_controller': 'joint_position_controller',
+            'launch_rviz': 'false'
         }.items(),
     )
 
@@ -86,7 +87,19 @@ def generate_launch_description():
             launch_arguments={
                 'ur_type': ur_type,
                 'gazebo_gui': 'false',
+                # 'initial_joint_controller': 'joint_position_controller',
+                'initial_joint_controller': 'joint_trajectory_controller',
+                'launch_rviz': 'false',
             }.items(),
+    )
+
+    moveit_config = IncludeLaunchDescription(
+        PathJoinSubstitution([ FindPackageShare('ur_moveit_config'), 'launch', 'ur_moveit.launch.py' ]),
+        launch_arguments={
+            'ur_type': ur_type,
+            'use_sim_time': enable_sim,
+            'launch_rviz': 'true',
+        }.items(),
     )
 
     static_img_frame_pub = Node(
@@ -119,6 +132,11 @@ def generate_launch_description():
     #     ]
     # )
 
+    # bass source /ros2_ws/install/setup.bash
+    # ros2 launch ur5_draw ur5_draw.launch.py enable_sim:=true launch_rviz:=false
+    # ros2 launch ur5_draw ur5_draw.launch.py enable_sim:=true launch_rviz:=false initial_joint_controller:=forward_position_controller
+    # ros2 launch ur_moveit_config ur_moveit.launch.py ur_type:=ur5 use_sim_time:=true launch_rviz:=true
+
 
     return LaunchDescription([
         enable_sim_arg,
@@ -132,6 +150,7 @@ def generate_launch_description():
         # Launches the appropriate UR driver setup
         ur_driver_real,
         ur_driver_sim,
+        moveit_config,
 
         # Launches your custom node
         # moveit_position_sender_node,
