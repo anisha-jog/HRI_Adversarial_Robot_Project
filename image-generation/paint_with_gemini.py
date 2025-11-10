@@ -3,57 +3,23 @@ import numpy as np
 import google.generativeai as genai
 from PIL import Image
 import io
+import image_to_svg
 import os
-from HRI_Adversarial_Robot_Project.jack_genai_test.config_files.gemini_api import GOOGLE_API_KEY 
+import sys
+from config import API_KEY, CANVAS_SIZE, GEMINI_PROMPT, MODELS
 
-# --- 1. Configuration ---
-API_KEY = GOOGLE_API_KEY
+module_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../tests'))
+sys.path.insert(0, module_dir)
 
+# Initialize Gemini API
 genai.configure(api_key=API_KEY)
 
-canvas_size = (300, 300, 3)
-# --- 2. Global Variables & Drawing Setup ---
+# --- Global Variables & Drawing Setup ---
 drawing = False         # True if mouse is pressed
 last_point = (0, 0)     # Last known mouse position
-canvas = np.full(canvas_size, 255, dtype=np.uint8) # White canvas
-old_drawing = np.full(canvas_size, 255, dtype=np.uint8) # White canvas
-new_drawing = np.full(canvas_size, 255, dtype=np.uint8) # White canvas
-window_name = "AI Co-Painter (Draw with mouse, 'a' = AI, 'c' = Clear, 'q' = Quit)"
-
-# This is the prompt you requested
-similar = "draw the next few strokes that is align with"
-opposite = "draw a subject that is diametrically opposite to"
-# GEMINI_PROMPT = f"""
-# You are an agent who helps the user to complete the drawing.
-# Given this partial drawing from the user, infer the general context
-# that the user is trying to draw, and {opposite} the current drawing's theme, context, vibe, etc.
-# Return the image of your additional drawing.
-
-# You must keep this format for the new drawing:
-# 1. Keep the original drawing intact.
-# 2. Overlay new drawing with red strokes on the original drawing.
-# 3. The thickness of new strokes should uniform, which is same as the thickness of the user's strokes.
-# 4. The return canvas resolution should be {canvas_size}.
-# 5. The new drawing should be feasible to draw with lines and it is simple enough so that we can be drawn within 5 strokes.
-# """
-
-GEMINI_PROMPT = f"""
-You are a creative painting agent collaborating with a user.
-Given this partial drawing from the user, infer the general context
-that the user is trying to draw, your role is not to imitate, but to challenge the human drawing in a constructive, surprising, and meaningful way.
-You can oppose the human's intent in three ways:
-(1) Visually (unrelated shape, color, texture),
-(2) Semantically (unrelated concept or meaning),
-(3) Compositionally (unrelated balance or layout).
-Always explain your reasoning before generating the next stroke suggestion.
-
-You must keep this format for the new drawing:
-1. Keep the original drawing intact.
-2. Overlay new drawing with red strokes on the original drawing.
-3. The thickness of new strokes should uniform, which is same as the thickness of the user's strokes.
-4. The return canvas resolution should be {canvas_size}.
-5. The new drawing should be feasible to draw with lines and it is simple enough so that we can be drawn within 5 strokes.
-"""
+canvas = np.full(CANVAS_SIZE, 255, dtype=np.uint8) # White canvas
+old_drawing = np.full(CANVAS_SIZE, 255, dtype=np.uint8) # White canvas
+new_drawing = np.full(CANVAS_SIZE, 255, dtype=np.uint8) # White canvas
 
 def separate_colors(img):
     data = np.array(img)
@@ -97,7 +63,7 @@ def draw_callback(event, x, y, flags, param):
     elif event == cv2.EVENT_MOUSEMOVE:
         if drawing:
             # Draw a black line from the last point to the current point
-            cv2.line(canvas, last_point, (x, y), (0, 0, 0), 5)
+            cv2.line(canvas, last_point, (x, y), (0, 0, 0), 2)
             last_point = (x, y)
     elif event == cv2.EVENT_LBUTTONUP:
         drawing = False
@@ -118,8 +84,16 @@ def blackize(image_data):
     return img_rgb
 
 # --- 4. Gemini API Function ---
-def get_gemini_drawing(image_data, prompt):
+def get_gemini_drawing(image_data, MODEL = MODELS["custom"]):
     """Sends the current canvas to Gemini and returns the modified image."""
+    NEW_PROMPT = GEMINI_PROMPT + f"""
+        For each attribute of the drawing, the style ranges from different, related but not identical, to similar.
+        For this drawing, use the following attributes in your response:
+        (1) {MODEL['visual']}
+        (2) {MODEL['semantic']}
+        (3) {MODEL['compositional']}
+        """
+    prompt = NEW_PROMPT.format(canvas_size=CANVAS_SIZE)
     
     print("Sending to Gemini... this may take a moment.")
     
@@ -163,11 +137,11 @@ def get_gemini_drawing(image_data, prompt):
                     
                     # Convert the PIL Image (RGB) back to an OpenCV image (BGR)
                     cv_output_img = cv2.cvtColor(np.array(pil_output_img), cv2.COLOR_RGB2BGR)
-                    cv_output_img = cv2.resize(cv_output_img, (canvas_size[1], canvas_size[0]))
+                    cv_output_img = cv2.resize(cv_output_img, (CANVAS_SIZE[1], CANVAS_SIZE[0]))
 
                     old, new = separate_colors(cv_output_img)
                     new_drawing[:] = np.array(new)
-                    cv_output_img = combine_images(old_drawing, new_drawing)
+                    cv_output_img = (old_drawing, new_drawing, combine_images(old_drawing, new_drawing))
 
 
                     print("Got new drawing from Gemini!")
@@ -187,52 +161,3 @@ def get_gemini_drawing(image_data, prompt):
     except Exception as e:
         print(f"An error occurred with the Gemini API: {e}")
         return None
-
-# --- 5. Main Application Loop ---
-def main():
-    global canvas, old_drawing, new_drawing
-    
-    cv2.namedWindow(window_name)
-    cv2.setMouseCallback(window_name, draw_callback)
-    
-    print("Starting AI Co-Painter...")
-    print("Controls:")
-    print("  - Draw with the mouse.")
-    print("  - Press 'a' to ask the AI to add to your drawing.")
-    print("  - Press 'c' to clear the canvas.")
-    print("  - Press 'q' or 'ESC' to quit.")
-
-    while True:
-        # Display the current canvas
-        cv2.imshow(window_name, canvas)
-        space = np.zeros((old_drawing.shape[0], 3, 3)).astype(type(old_drawing[0,0,0]))
-        cv2.imshow("Old drawing / New drawing", np.hstack((old_drawing, space, new_drawing)))
-        
-        # Wait for a key press
-        key = cv2.waitKey(1) & 0xFF
-
-        # --- Handle Key Presses ---
-
-        # 'q' or 'ESC' to quit
-        if key == ord('q') or key == 27:
-            print("Exiting...")
-            break
-        
-        # 'a' to send to AI
-        elif key == ord('a'):
-            # Send a copy of the canvas to Gemini
-            new_canvas = get_gemini_drawing(canvas.copy(), GEMINI_PROMPT)
-            
-            if new_canvas is not None:
-                # Update our canvas with the AI's drawing
-                canvas = new_canvas
-        
-        # 'c' to clear
-        elif key == ord('c'):
-            print("Canvas cleared.")
-            canvas = np.full(canvas_size, 255, dtype=np.uint8)
-
-    cv2.destroyAllWindows()
-
-if __name__ == "__main__":
-    main()

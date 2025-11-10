@@ -1,13 +1,11 @@
-### Remember to install dependencies:
-### !pip install potracer
-### !pip install svgwrite
-
 from skimage.morphology import skeletonize
 from skimage import data
 import svgwrite
 import potrace
 from potrace import Bitmap
 import math
+import cv2
+import numpy as np
 
 def create_svg(lines, filename, width, height):
     """
@@ -34,6 +32,7 @@ def bezier_to_points(p1, c1, c2, p2, segments=10):
         y = (1 - t)**3 * p1[1]+ 3 * (1 - t)**2 * t * c1[1] + 3 * (1 - t) * t**2 * c2[1] + t**3 * p2[1]
         acc.append((x, y))
     return acc
+
 def linearize_bezier(path):
   lines = []
   for curve in path:
@@ -53,7 +52,27 @@ def linearize_bezier(path):
     lines.append(points)
   return lines[1:]
 
-def image_to_svg(bitmap):
+# Create SVG lines from bitmap, also returns the points for each line
+def bitmap_to_svg(bitmap, filename="out.svg"):
   skeleton = skeletonize(bitmap)
   vector = Bitmap(skeleton).trace()
-  create_svg(linearize_bezier(vector), "out.svg", bitmap.shape[1], bitmap.shape[0])
+  lines = linearize_bezier(vector)
+  create_svg(lines, filename, bitmap.shape[1], bitmap.shape[0])
+  return lines
+
+def bitmap_to_lines(bitmap):
+  skeleton = skeletonize(bitmap)
+  vector = Bitmap(skeleton).trace()
+  lines = linearize_bezier(vector)
+  return lines
+
+# Create SVG from image (i.e. additional threshhold operation), also returns the points for each line
+def image_to_svg(image, filename="out.svg"):
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    _, binary = cv2.threshold(gray, 200, 255, cv2.THRESH_BINARY_INV)
+    return bitmap_to_svg(binary, filename)
+
+def image_to_lines(image):
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    _, binary = cv2.threshold(gray, 200, 255, cv2.THRESH_BINARY_INV)
+    return bitmap_to_lines(binary)

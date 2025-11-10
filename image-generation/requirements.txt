@@ -1,0 +1,8 @@
+Pillow
+numpy
+opencv-python
+svgwrite
+google-generativeai
+requests
+potracer
+scikit-image
