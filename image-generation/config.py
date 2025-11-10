@@ -66,6 +66,8 @@ You must keep this format for the new drawing:
 6. The new drawing should be feasible to draw with only lines and it is simple enough so that we can be drawn within 5 strokes.
 """
 
+
+### Original prompt: 
 """
 You are a creative painting agent collaborating with a user.
 Given this partial drawing from the user, infer the general context
