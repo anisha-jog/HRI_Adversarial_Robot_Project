@@ -15,6 +15,7 @@ from copy import deepcopy
 import numpy as np
 
 from ur_draw_cmake.srv import MoveToPose
+from ur_draw_cmake.srv import DrawStroke
 
 PEN_HEIGHT = .3
 HOME_POSE = Pose(position=Point(x=0.20, y=0.0, z=0.5),orientation=Quaternion(w=.707,x=-.707))
@@ -31,10 +32,12 @@ class DrawSVG(Node):
         super().__init__('draw_svg')
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self)
-        self.client = self.create_client(MoveToPose, 'moveit_to_pose')
+        # self.client = self.create_client(MoveToPose, 'moveit_to_pose')
+        self.client = self.create_client(DrawStroke, 'moveit_draw_stroke')
         while not self.client.wait_for_service(timeout_sec=1.0):
             self.get_logger().info('Service not available, waiting again...')
-        self.request = MoveToPose.Request()
+        # self.request = MoveToPose.Request()
+        self.request = DrawStroke.Request()
 
         self.image_to_world_t = self.get_img_transform('image_frame', 'world')
         # self.tool_to_frame = self.get_img_transform('tool0', 'pen_frame')
@@ -88,7 +91,8 @@ class DrawSVG(Node):
     def go_home(self):
         home_pose_world = do_transform_pose(HOME_POSE, self.image_to_world_t)
         # home_pose_world = do_transform_pose(do_transform_pose(HOME_POSE, self.image_to_world_t),self.tool_to_frame)
-        future = self.send_request(home_pose_world)
+        # future = self.send_request(home_pose_world)
+        future = self.send_request([home_pose_world,])
         rclpy.spin_until_future_complete(self, future)
         if future.result() is not None:
             self.get_logger().info("Returned to home position successfully.")
@@ -97,6 +101,11 @@ class DrawSVG(Node):
 
     def send_request(self, pose):
         self.request.target_pose = pose
+        self.get_logger().info("Sending request to move to the target pose...")
+        return self.client.call_async(self.request)
+
+    def send_traj_request(self, poses):
+        self.request.target_poses = poses
         self.get_logger().info("Sending request to move to the target pose...")
         return self.client.call_async(self.request)
 
@@ -143,6 +152,32 @@ class DrawSVG(Node):
         self.go_home()
 
 
+    def draw_stroke_traj(self, points):
+        pose_list = []
+        for point in points:
+            x, y = point
+            img_pose = Pose()
+            img_pose.position.x = x
+            img_pose.position.y = y
+            img_pose.position.z = PEN_HEIGHT
+
+            img_pose.orientation.w = 0.707
+            img_pose.orientation.x = -0.707
+            img_pose.orientation.y = 0.0
+            img_pose.orientation.z = 0.0
+
+            world_pose = do_transform_pose(img_pose, self.image_to_world_t)
+            self.des_pose.pose = world_pose
+            self.des_pose.header.stamp = self.get_clock().now().to_msg()
+            self.des_pose_pub.publish(self.des_pose)
+            pose_list.append(world_pose)
+
+        self.send_traj_request(pose_list)
+
+
+
+
+
 
 
 def main(args=None):
@@ -152,7 +187,8 @@ def main(args=None):
 
     try:
         # draw_svg_node.go_home()
-        draw_svg_node.draw_stroke(TEST_STROKE)
+        # draw_svg_node.draw_stroke(TEST_STROKE)
+        draw_svg_node.draw_stroke_traj(TEST_STROKE)
         # rclpy.spin(draw_svg_node)
     except KeyboardInterrupt:
         pass
