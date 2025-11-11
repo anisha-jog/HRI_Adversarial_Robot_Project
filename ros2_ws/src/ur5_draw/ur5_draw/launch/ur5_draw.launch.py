@@ -2,8 +2,92 @@ from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, OpaqueFunction
 from launch.conditions import IfCondition, UnlessCondition
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, TextSubstitution
+from launch.substitutions import PathJoinSubstitution, Command, FindExecutable
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
+
+
+def get_robot_description(ur_type,robot_ip):
+    joint_limit_params = PathJoinSubstitution(
+        [FindPackageShare("ur_description"), "config",ur_type, "joint_limits.yaml"]
+    )
+    kinematics_params = PathJoinSubstitution(
+        [FindPackageShare("ur_description"), "config", ur_type, "default_kinematics.yaml"]
+    )
+    physical_params = PathJoinSubstitution(
+        [FindPackageShare("ur_description"), "config", ur_type, "physical_parameters.yaml"]
+    )
+    visual_params = PathJoinSubstitution(
+        [FindPackageShare("ur_description"), "config", ur_type, "visual_parameters.yaml"]
+    )
+    robot_description_content = Command(
+        [
+            PathJoinSubstitution([FindExecutable(name="xacro")]),
+            " ",
+            PathJoinSubstitution([FindPackageShare("ur_description"), "urdf", "ur.urdf.xacro"]),
+            " ",
+            "robot_ip:=",
+            robot_ip,
+            " ",
+            "joint_limit_params:=",
+            joint_limit_params,
+            " ",
+            "kinematics_params:=",
+            kinematics_params,
+            " ",
+            "physical_params:=",
+            physical_params,
+            " ",
+            "visual_params:=",
+            visual_params,
+            " ",
+           "safety_limits:=",
+            "true",
+            " ",
+            "safety_pos_margin:=",
+            "0.15",
+            " ",
+            "safety_k_position:=",
+            "20",
+            " ",
+            "name:=",
+            "ur",
+            " ",
+            "ur_type:=",
+            ur_type,
+            " ",
+            "prefix:=",
+            '""',
+            " ",
+        ]
+    )
+
+
+    robot_description = {"robot_description": robot_description_content}
+    return robot_description
+
+def get_robot_description_semantic():
+    # MoveIt Configuration
+    robot_description_semantic_content = Command(
+        [
+            PathJoinSubstitution([FindExecutable(name="xacro")]),
+            " ",
+            PathJoinSubstitution([FindPackageShare("ur_moveit_config"), "srdf", "ur.srdf.xacro"]),
+            " ",
+            "name:=",
+            # Also ur_type parameter could be used but then the planning group names in yaml
+            # configs has to be updated!
+            "ur",
+            " ",
+            "prefix:=",
+            '""',
+            " ",
+        ]
+    )
+    robot_description_semantic = {
+        "robot_description_semantic": robot_description_semantic_content
+    }
+    return robot_description_semantic
 
 
 def generate_launch_description():
@@ -69,7 +153,7 @@ def generate_launch_description():
             'use_fake_hardware': 'false',
             'headless_mode': 'true',
             'use_sim_time': 'false', # Important for real robot
-            'initial_joint_controller': 'joint_position_controller',
+            'initial_joint_controller': 'joint_trajectory_controller',
             'launch_rviz': 'false'
         }.items(),
     )
@@ -121,34 +205,24 @@ def generate_launch_description():
                     '0', '--frame-id', 'tool0', '--child-frame-id', 'pen_frame']
             )
 
+    robot_description = get_robot_description(ur_type,robot_ip)
+    robot_description_semantic = get_robot_description_semantic()
+
     moveit_service = Node(
         package="ur_draw_cmake",
         executable="moveit_service",
         name="moveit_service",
         output="screen",
-        # parameters=[
-        #     robot_description,
-        #     robot_description_semantic,
-        # ],
+        parameters=[
+            robot_description,
+            robot_description_semantic,
+        ],
     )
-
-    # This node needs to be built and installed via your package's setup.py
-    # We assume this node is in a package named 'my_ur5_control'
-    # moveit_position_sender_node = Node(
-    #     package='my_ur5_control', # Replace with your package name
-    #     executable='moveit_position_client',
-    #     name='moveit_position_client',
-    #     output='screen',
-    #     parameters=[
-    #         {'use_sim_time': enable_sim} # Use sim time if simulation is enabled
-    #     ]
-    # )
 
     # bass source /ros2_ws/install/setup.bash
     # ros2 launch ur5_draw ur5_draw.launch.py enable_sim:=true launch_rviz:=false
     # ros2 launch ur5_draw ur5_draw.launch.py enable_sim:=true launch_rviz:=false initial_joint_controller:=forward_position_controller
     # ros2 launch ur_moveit_config ur_moveit.launch.py ur_type:=ur5 use_sim_time:=true launch_rviz:=true
-
 
     return LaunchDescription([
         enable_sim_arg,
@@ -157,7 +231,7 @@ def generate_launch_description():
         set_x_offset,
         set_y_offset,
         static_img_frame_pub,
-        static_pen_frame_pub,
+        # static_pen_frame_pub,
         moveit_service,
 
         # Launches the appropriate UR driver setup
@@ -165,6 +239,4 @@ def generate_launch_description():
         ur_driver_sim,
         moveit_config,
 
-        # Launches your custom node
-        # moveit_position_sender_node,
     ])
