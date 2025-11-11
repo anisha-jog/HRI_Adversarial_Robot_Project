@@ -19,6 +19,28 @@ using MoveGroupInterface = moveit::planning_interface::MoveGroupInterface;
 
 // Define the name of the planning group for the UR5
 const std::string PLANNING_GROUP = "ur_manipulator";
+const float RAISED_PEN_HEIGHT = 0.01;
+const double DISTANCE_THRESHOLD = 0.1;
+
+// Function to calculate Euclidean distance between two poses
+double calculate_distance(const geometry_msgs::msg::Pose& pose1,
+                         const geometry_msgs::msg::Pose& pose2)
+{
+    double dx = pose2.position.x - pose1.position.x;
+    double dy = pose2.position.y - pose1.position.y;
+    double dz = pose2.position.z - pose1.position.z;
+    return std::sqrt(dx*dx + dy*dy + dz*dz);
+}
+
+// Function to get current pose from move_group in world frame
+geometry_msgs::msg::Pose get_current_pose(MoveGroupInterface& move_group_interface,
+                                          const rclcpp::Logger& logger)
+{
+    geometry_msgs::msg::PoseStamped current_pose_stamped =
+        move_group_interface.getCurrentPose("tool0");
+
+    return current_pose_stamped.pose;
+}
 
 // Assuming the service name is still DrawStroke, but now accepts a vector
 void handle_stroke_service(
@@ -42,22 +64,38 @@ void handle_stroke_service(
     move_group_interface.setPoseReferenceFrame("world");
     move_group_interface.setNumPlanningAttempts(20);
 
-    // -----------------------------------------------------------
-    // PHASE 1: Move to the FIRST Pose (Standard setPoseTarget)
-    // -----------------------------------------------------------
+    geometry_msgs::msg::Pose current_pose = get_current_pose(move_group_interface, logger);
+
     const auto& first_pose = request->target_poses[0];
-    RCLCPP_INFO(logger, "Phase 1: Moving to start pose...");
+    auto raised_pose = first_pose;
+    raised_pose.position.z += RAISED_PEN_HEIGHT;
 
-    move_group_interface.setPoseTarget(first_pose, "tool0");
+    // Calculate distance to first target pose
+    double distance_to_target = calculate_distance(current_pose, raised_pose);
 
-    moveit::planning_interface::MoveGroupInterface::Plan initial_plan;
-    bool success = static_cast<bool>(move_group_interface.plan(initial_plan));
+    RCLCPP_INFO(logger, "Distance to first target: %.4f m (threshold: %.4f m)",
+                distance_to_target, DISTANCE_THRESHOLD);
 
-    if (!success || move_group_interface.execute(initial_plan) != moveit::core::MoveItErrorCode::SUCCESS) {
-        response->success = false;
-        response->message = "Failed to reach the initial pose (index 0) with standard planning.";
-        RCLCPP_ERROR(logger, "%s", response->message.c_str());
-        return;
+    // PHASE 1: Move to the FIRST Pose
+    bool used_standard_planning = false;
+    if (distance_to_target > DISTANCE_THRESHOLD) {
+        RCLCPP_INFO(logger, "Phase 1: Distance exceeds threshold. Using standard planning to approach start pose...");
+        move_group_interface.setPoseTarget(raised_pose, "tool0");
+
+        moveit::planning_interface::MoveGroupInterface::Plan initial_plan;
+        bool success = static_cast<bool>(move_group_interface.plan(initial_plan));
+
+        if (!success || move_group_interface.execute(initial_plan) != moveit::core::MoveItErrorCode::SUCCESS) {
+            response->success = false;
+            response->message = "Failed to reach the raised initial pose with standard planning.";
+            RCLCPP_ERROR(logger, "%s", response->message.c_str());
+            return;
+        }
+
+        used_standard_planning = true;
+        RCLCPP_INFO(logger, "Successfully reached raised start position.");
+    } else {
+        RCLCPP_INFO(logger, "Phase 1: Distance within threshold. Skipping standard planning, will use Cartesian path.");
     }
 
     // -----------------------------------------------------------
@@ -93,10 +131,17 @@ void handle_stroke_service(
         // the motion, we can just pass the subsequent target poses as waypoints.
         // The current pose is implicitly the start of the Cartesian path search.
 
-        // We add all poses from index 1 (the second pose) to the end of the list.
-        for (size_t i = 1; i < request->target_poses.size(); ++i) {
+        if (used_standard_planning) {
+            waypoints.push_back(raised_pose); // Lower to actual first pose
+        }
+
+        // We add all poses from index 0 to the end of the list.
+        for (size_t i = 0; i < request->target_poses.size(); ++i) {
             waypoints.push_back(request->target_poses[i]);
         }
+        auto final_waypoint_raised = request->target_poses[request->target_poses.size() - 1];
+        final_waypoint_raised.position.z+=RAISED_PEN_HEIGHT;
+        waypoints.push_back(final_waypoint_raised);
 
         // 3. Compute the path
         moveit_msgs::msg::RobotTrajectory trajectory;
