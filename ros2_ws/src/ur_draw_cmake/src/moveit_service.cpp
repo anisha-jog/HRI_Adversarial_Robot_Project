@@ -1,261 +1,367 @@
 #include <memory>
+#include <thread>
+#include <cmath>
+#include <vector>
+
 #include <rclcpp/rclcpp.hpp>
 #include <moveit/move_group_interface/move_group_interface.h>
-#include <moveit_msgs/msg/orientation_constraint.hpp>
 #include <moveit/planning_scene_interface/planning_scene_interface.h>
+#include <moveit_msgs/msg/orientation_constraint.hpp>
+#include <moveit_msgs/msg/constraints.hpp>
+#include <moveit_msgs/msg/collision_object.hpp>
+#include <shape_msgs/msg/solid_primitive.hpp>
 
-// Include the custom service header
-// #include "ur_draw_cmake/srv/move_to_pose.hpp"
 #include "ur_draw_cmake/srv/draw_stroke.hpp"
 
-#include <vector> // Ensure this is included
-#include <moveit_msgs/msg/constraints.hpp>
-#include <moveit_msgs/msg/orientation_constraint.hpp>
-
-
-// Use an alias for the service type for cleaner code
-using DrawStroke = ur_draw_cmake::srv::DrawStroke;
-using MoveGroupInterface = moveit::planning_interface::MoveGroupInterface;
-
-// Define the name of the planning group for the UR5
-const std::string PLANNING_GROUP = "ur_manipulator";
-const float RAISED_PEN_HEIGHT = 0.01;
-const double DISTANCE_THRESHOLD = 0.1;
-
-// Function to calculate Euclidean distance between two poses
-double calculate_distance(const geometry_msgs::msg::Pose& pose1,
-                         const geometry_msgs::msg::Pose& pose2)
+class DrawStrokeServer : public rclcpp::Node
 {
-    double dx = pose2.position.x - pose1.position.x;
-    double dy = pose2.position.y - pose1.position.y;
-    double dz = pose2.position.z - pose1.position.z;
-    return std::sqrt(dx*dx + dy*dy + dz*dz);
-}
+public:
+    DrawStrokeServer()
+        : Node("moveit_draw_stroke_server",
+               rclcpp::NodeOptions().automatically_declare_parameters_from_overrides(true)),
+          planning_group_("ur_manipulator"),
+          raised_pen_height_(0.01),
+          distance_threshold_(0.1),
+          eef_step_(0.005),
+          cartesian_fraction_threshold_(0.9)
+    {
+        // Declare and get parameters
+        this->declare_parameter("planning_group", planning_group_);
+        this->declare_parameter("raised_pen_height", raised_pen_height_);
+        this->declare_parameter("distance_threshold", distance_threshold_);
+        this->declare_parameter("eef_step", eef_step_);
+        this->declare_parameter("cartesian_fraction_threshold", cartesian_fraction_threshold_);
 
-// Function to get current pose from move_group in world frame
-geometry_msgs::msg::Pose get_current_pose(MoveGroupInterface& move_group_interface,
-                                          const rclcpp::Logger& logger)
-{
-    geometry_msgs::msg::PoseStamped current_pose_stamped =
-        move_group_interface.getCurrentPose("tool0");
+        this->get_parameter("planning_group", planning_group_);
+        this->get_parameter("raised_pen_height", raised_pen_height_);
+        this->get_parameter("distance_threshold", distance_threshold_);
+        this->get_parameter("eef_step", eef_step_);
+        this->get_parameter("cartesian_fraction_threshold", cartesian_fraction_threshold_);
 
-    return current_pose_stamped.pose;
-}
+        // Create service
+        service_ = this->create_service<ur_draw_cmake::srv::DrawStroke>(
+            "moveit_draw_stroke",
+            std::bind(&DrawStrokeServer::handle_draw_stroke_request,
+                     this,
+                     std::placeholders::_1,
+                     std::placeholders::_2));
 
-// Assuming the service name is still DrawStroke, but now accepts a vector
-void handle_stroke_service(
-    const std::shared_ptr<rclcpp::Node>& node,
-    const std::shared_ptr<rmw_request_id_t>& header,
-    const DrawStroke::Request::SharedPtr request,
-    DrawStroke::Response::SharedPtr response)
-{
-    (void)header;
-    auto const logger = rclcpp::get_logger("moveit_pose_service_server");
-
-    // Check for empty list
-    if (request->target_poses.empty()) {
-        RCLCPP_WARN(logger, "Received an empty list of target poses.");
-        response->success = true;
-        response->message = "Received empty pose list. No movement executed.";
-        return;
+        RCLCPP_INFO(this->get_logger(), "DrawStroke Service Server initialized");
+        RCLCPP_INFO(this->get_logger(), "  Planning group: %s", planning_group_.c_str());
+        RCLCPP_INFO(this->get_logger(), "  Raised pen height: %.3f m", raised_pen_height_);
+        RCLCPP_INFO(this->get_logger(), "  Distance threshold: %.3f m", distance_threshold_);
+        RCLCPP_INFO(this->get_logger(), "Service ready at: /moveit_draw_stroke");
     }
 
-    auto move_group_interface = MoveGroupInterface(node, PLANNING_GROUP);
-    move_group_interface.setPoseReferenceFrame("world");
-    move_group_interface.setNumPlanningAttempts(20);
+    /**
+     * @brief Add collision objects to the planning scene
+     */
+    void add_collision_objects()
+    {
+        // Wait a bit for planning scene to be ready
+        rclcpp::sleep_for(std::chrono::seconds(1));
 
-    geometry_msgs::msg::Pose current_pose = get_current_pose(move_group_interface, logger);
+        moveit::planning_interface::PlanningSceneInterface planning_scene;
 
-    const auto& first_pose = request->target_poses[0];
-    auto raised_pose = first_pose;
-    raised_pose.position.z += RAISED_PEN_HEIGHT;
+        // Create table collision object
+        moveit_msgs::msg::CollisionObject table;
+        table.header.frame_id = "world";
+        table.header.stamp = this->now();
+        table.id = "table";
+        table.operation = moveit_msgs::msg::CollisionObject::ADD;
 
-    // Calculate distance to first target pose
-    double distance_to_target = calculate_distance(current_pose, raised_pose);
+        // Define table as a box
+        shape_msgs::msg::SolidPrimitive primitive;
+        primitive.type = primitive.BOX;
+        primitive.dimensions.resize(3);
+        primitive.dimensions[0] = 2.0;  // X length (2m)
+        primitive.dimensions[1] = 2.0;  // Y width (2m)
+        primitive.dimensions[2] = 0.05; // Z height (5cm)
 
-    RCLCPP_INFO(logger, "Distance to first target: %.4f m (threshold: %.4f m)",
-                distance_to_target, DISTANCE_THRESHOLD);
+        // Position the table
+        geometry_msgs::msg::Pose table_pose;
+        table_pose.orientation.w = 1.0;
+        table_pose.position.x = 0.0;
+        table_pose.position.y = 0.0;
+        table_pose.position.z = -0.05; // Top surface at Z=0
 
-    // PHASE 1: Move to the FIRST Pose
-    bool used_standard_planning = false;
-    if (distance_to_target > DISTANCE_THRESHOLD) {
-        RCLCPP_INFO(logger, "Phase 1: Distance exceeds threshold. Using standard planning to approach start pose...");
-        move_group_interface.setPoseTarget(raised_pose, "tool0");
+        table.primitives.push_back(primitive);
+        table.primitive_poses.push_back(table_pose);
 
-        moveit::planning_interface::MoveGroupInterface::Plan initial_plan;
-        bool success = static_cast<bool>(move_group_interface.plan(initial_plan));
+        // Add to scene
+        std::vector<moveit_msgs::msg::CollisionObject> collision_objects;
+        collision_objects.push_back(table);
 
-        if (!success || move_group_interface.execute(initial_plan) != moveit::core::MoveItErrorCode::SUCCESS) {
-            response->success = false;
-            response->message = "Failed to reach the raised initial pose with standard planning.";
-            RCLCPP_ERROR(logger, "%s", response->message.c_str());
-            return;
+        bool success = planning_scene.applyCollisionObjects(collision_objects);
+
+        if (success) {
+            RCLCPP_INFO(this->get_logger(),
+                       "Successfully added 'table' collision object to planning scene");
+
+            // Verify the object was added
+            auto known_objects = planning_scene.getKnownObjectNames();
+            RCLCPP_INFO(this->get_logger(), "Known objects in scene: %zu", known_objects.size());
+            for (const auto& obj : known_objects) {
+                RCLCPP_INFO(this->get_logger(), "  - %s", obj.c_str());
+            }
+        } else {
+            RCLCPP_WARN(this->get_logger(),
+                       "Failed to add 'table' collision object to planning scene");
+        }
+    }
+
+private:
+    // Member variables
+    rclcpp::Service<ur_draw_cmake::srv::DrawStroke>::SharedPtr service_;
+    std::string planning_group_;
+    double raised_pen_height_;
+    double distance_threshold_;
+    double eef_step_;
+    double cartesian_fraction_threshold_;
+
+    /**
+     * @brief Calculate Euclidean distance between two poses
+     */
+    double calculate_distance(const geometry_msgs::msg::Pose& pose1,
+                             const geometry_msgs::msg::Pose& pose2) const
+    {
+        double dx = pose2.position.x - pose1.position.x;
+        double dy = pose2.position.y - pose1.position.y;
+        double dz = pose2.position.z - pose1.position.z;
+        return std::sqrt(dx*dx + dy*dy + dz*dz);
+    }
+
+    /**
+     * @brief Get current pose of the end effector in world frame
+     */
+    geometry_msgs::msg::Pose get_current_pose(
+        moveit::planning_interface::MoveGroupInterface& move_group) const
+    {
+        geometry_msgs::msg::PoseStamped current_pose_stamped =
+            move_group.getCurrentPose("tool0");
+
+        RCLCPP_DEBUG(this->get_logger(), "Current pose: [%.3f, %.3f, %.3f]",
+                    current_pose_stamped.pose.position.x,
+                    current_pose_stamped.pose.position.y,
+                    current_pose_stamped.pose.position.z);
+
+        return current_pose_stamped.pose;
+    }
+
+    /**
+     * @brief Create a raised version of a pose (pen up)
+     */
+    geometry_msgs::msg::Pose create_raised_pose(const geometry_msgs::msg::Pose& pose) const
+    {
+        auto raised_pose = pose;
+        raised_pose.position.z += raised_pen_height_;
+        return raised_pose;
+    }
+
+    /**
+     * @brief Move to a target pose using standard planning
+     */
+    bool move_to_pose(moveit::planning_interface::MoveGroupInterface& move_group,
+                     const geometry_msgs::msg::Pose& target_pose,
+                     const std::string& error_prefix)
+    {
+        move_group.setPoseTarget(target_pose, "tool0");
+
+        moveit::planning_interface::MoveGroupInterface::Plan plan;
+        bool success = static_cast<bool>(move_group.plan(plan));
+
+        if (!success) {
+            RCLCPP_ERROR(this->get_logger(), "%s: Planning failed", error_prefix.c_str());
+            return false;
         }
 
-        used_standard_planning = true;
-        RCLCPP_INFO(logger, "Successfully reached raised start position.");
-    } else {
-        RCLCPP_INFO(logger, "Phase 1: Distance within threshold. Skipping standard planning, will use Cartesian path.");
+        if (move_group.execute(plan) != moveit::core::MoveItErrorCode::SUCCESS) {
+            RCLCPP_ERROR(this->get_logger(), "%s: Execution failed", error_prefix.c_str());
+            return false;
+        }
+
+        return true;
     }
 
-    // -----------------------------------------------------------
-    // PHASE 2: Cartesian Path for remaining Poses (Drawing)
-    // -----------------------------------------------------------
-    if (request->target_poses.size() > 1) {
-        RCLCPP_INFO(logger, "Phase 2: Computing Cartesian path for %zu waypoints...", request->target_poses.size() - 1);
-
-        // 1. Setup Orientation Constraint
+    /**
+     * @brief Setup orientation constraints for Cartesian path
+     */
+    void setup_orientation_constraints(
+        moveit::planning_interface::MoveGroupInterface& move_group,
+        const geometry_msgs::msg::Pose& reference_pose)
+    {
         moveit_msgs::msg::OrientationConstraint ocm;
         ocm.link_name = "tool0";
-        ocm.header.frame_id = move_group_interface.getPlanningFrame(); // "world"
-
-        // Set tolerances:
+        ocm.header.frame_id = move_group.getPlanningFrame();
+        ocm.orientation = reference_pose.orientation;
         ocm.absolute_x_axis_tolerance = 0.01;
         ocm.absolute_y_axis_tolerance = 0.01;
         ocm.absolute_z_axis_tolerance = M_PI;
         ocm.weight = 1.0;
 
-        // The constraint should be based on the *desired* orientation for the path.
-        // We will use the orientation of the *last successful pose* (first_pose)
-        ocm.orientation = first_pose.orientation;
-
         moveit_msgs::msg::Constraints path_constraints;
         path_constraints.orientation_constraints.push_back(ocm);
-        move_group_interface.setPathConstraints(path_constraints);
+        move_group.setPathConstraints(path_constraints);
+    }
 
-        // 2. Prepare Waypoints
-        std::vector<geometry_msgs::msg::Pose> waypoints;
-        // The Cartesian planner starts at the robot's *current* pose, which is first_pose.
-        // We start the waypoint list from the SECOND requested pose onwards.
-        // The first waypoint must be the robot's current pose, but since we are continuing
-        // the motion, we can just pass the subsequent target poses as waypoints.
-        // The current pose is implicitly the start of the Cartesian path search.
+    /**
+     * @brief Execute Cartesian path through waypoints
+     */
+    bool execute_cartesian_path(
+        moveit::planning_interface::MoveGroupInterface& move_group,
+        const std::vector<geometry_msgs::msg::Pose>& waypoints,
+        std::string& message)
+    {
+        RCLCPP_INFO(this->get_logger(),
+                   "Computing Cartesian path with %zu waypoints...", waypoints.size());
 
-        if (used_standard_planning) {
-            waypoints.push_back(raised_pose); // Lower to actual first pose
-        }
-
-        // We add all poses from index 0 to the end of the list.
-        for (size_t i = 0; i < request->target_poses.size(); ++i) {
-            waypoints.push_back(request->target_poses[i]);
-        }
-        auto final_waypoint_raised = request->target_poses[request->target_poses.size() - 1];
-        final_waypoint_raised.position.z+=RAISED_PEN_HEIGHT;
-        waypoints.push_back(final_waypoint_raised);
-
-        // 3. Compute the path
         moveit_msgs::msg::RobotTrajectory trajectory;
-        const double eef_step = 0.005; // 5mm step
-        const double jump_threshold = 0.0; // Prevent joint jumps/flips
+        const double jump_threshold = 0.0; // Prevent joint jumps
 
-        // Note: Cartesian Path planning does *not* automatically use the path constraints
-        // set by setPathConstraints, but they are generally advisory for path validation.
-        // The real continuity is enforced by jump_threshold=0.0.
-        double fraction = move_group_interface.computeCartesianPath(
+        double fraction = move_group.computeCartesianPath(
             waypoints,
-            eef_step,
+            eef_step_,
             jump_threshold,
             trajectory,
             true // avoid_collisions
         );
 
-        move_group_interface.clearPathConstraints(); // Clear constraints immediately
+        move_group.clearPathConstraints();
 
-        // 4. Execution of Cartesian Path
-        if (fraction >= 0.9) {
-            moveit::planning_interface::MoveGroupInterface::Plan cartesian_plan;
-            cartesian_plan.trajectory_ = trajectory; // Assign computed trajectory
+        RCLCPP_INFO(this->get_logger(),
+                   "Cartesian path computed: %.2f%% achieved", fraction * 100.0);
 
-            moveit::core::MoveItErrorCode execute_result = move_group_interface.execute(cartesian_plan);
-
-            if (execute_result == moveit::core::MoveItErrorCode::SUCCESS) {
-                response->success = true;
-                response->message = "Path execution complete and successful.";
-            } else {
-                response->success = false;
-                response->message = "Cartesian path execution failed.";
-                RCLCPP_ERROR(logger, "%s", response->message.c_str());
-            }
-        } else {
-            response->success = false;
-            response->message = "Failed to compute at least 90% of the Cartesian path.";
-            RCLCPP_ERROR(logger, "Failed fraction: %.2f%%. %s", fraction * 100.0, response->message.c_str());
+        if (fraction < cartesian_fraction_threshold_) {
+            message = "Failed to compute at least " +
+                     std::to_string(static_cast<int>(cartesian_fraction_threshold_ * 100)) +
+                     "% of the Cartesian path. Achieved: " +
+                     std::to_string(static_cast<int>(fraction * 100)) + "%";
+            RCLCPP_ERROR(this->get_logger(), "%s", message.c_str());
+            return false;
         }
-    } else {
-        // Only one pose was provided, already handled by Phase 1
-        response->success = true;
-        response->message = "Successfully moved to the single pose provided.";
+
+        // Execute the trajectory
+        moveit::planning_interface::MoveGroupInterface::Plan cartesian_plan;
+        cartesian_plan.trajectory_ = trajectory;
+
+        if (move_group.execute(cartesian_plan) != moveit::core::MoveItErrorCode::SUCCESS) {
+            message = "Cartesian path execution failed";
+            RCLCPP_ERROR(this->get_logger(), "%s", message.c_str());
+            return false;
+        }
+
+        message = "Path execution complete and successful";
+        RCLCPP_INFO(this->get_logger(), "%s", message.c_str());
+        return true;
     }
-}
 
-// Function to add a fixed collision object (The Table/Ground)
-// void add_collision_object(const std::shared_ptr<rclcpp::Node>& node)
-void add_collision_object()
-{
-    auto const logger = rclcpp::get_logger("moveit_pose_service_server");
-    moveit::planning_interface::PlanningSceneInterface planning_scene_interface;
+    /**
+     * @brief Main service callback handler
+     */
+    void handle_draw_stroke_request(
+        const std::shared_ptr<ur_draw_cmake::srv::DrawStroke::Request> request,
+        std::shared_ptr<ur_draw_cmake::srv::DrawStroke::Response> response)
+    {
+        RCLCPP_INFO(this->get_logger(),
+                   "Received draw stroke request with %zu poses",
+                   request->target_poses.size());
 
-    // Create the collision object message
-    moveit_msgs::msg::CollisionObject table;
-    table.header.frame_id = "world"; // The object is defined relative to the world frame
-    table.id = "table";
+        // Validate request
+        if (request->target_poses.empty()) {
+            RCLCPP_WARN(this->get_logger(), "Received empty pose list");
+            response->success = true;
+            response->message = "Received empty pose list. No movement executed.";
+            return;
+        }
 
-    // Define the dimensions of the table as a box (e.g., a large, thin plane)
-    shape_msgs::msg::SolidPrimitive primitive;
-    primitive.type = primitive.BOX;
+        // Initialize MoveGroupInterface
+        auto move_group = std::make_shared<moveit::planning_interface::MoveGroupInterface>(
+            shared_from_this(), planning_group_);
+        move_group->setPoseReferenceFrame("world");
+        move_group->setNumPlanningAttempts(20);
 
-    // Example Dimensions: 2m x 2m x 0.05m (Height)
-    primitive.dimensions.resize(3);
-    primitive.dimensions[0] = 2.0; // X length
-    primitive.dimensions[1] = 2.0; // Y width
-    primitive.dimensions[2] = 0.05; // Z height (Keep thin)
+        // Get current and target poses
+        geometry_msgs::msg::Pose current_pose = get_current_pose(*move_group);
+        const auto& first_pose = request->target_poses[0];
+        auto raised_first_pose = create_raised_pose(first_pose);
 
-    // Define the pose (location) of the table
-    geometry_msgs::msg::Pose table_pose;
-    // Assuming the ground plane is at Z=0.0 in Gazebo.
-    // Set the box center at Z = -height/2 to make the top surface at Z=0.0
-    table_pose.orientation.w = 1.0;
-    table_pose.position.x = 0.0;
-    table_pose.position.y = 0.0;
-    table_pose.position.z = -0.05; // Center of 0.05m box should be at Z=-0.025
+        // Calculate distance to determine approach strategy
+        double distance = calculate_distance(current_pose, raised_first_pose);
+        RCLCPP_INFO(this->get_logger(),
+                   "Distance to first target: %.4f m (threshold: %.4f m)",
+                   distance, distance_threshold_);
 
-    table.primitives.push_back(primitive);
-    table.primitive_poses.push_back(table_pose);
-    table.operation = moveit_msgs::msg::CollisionObject::ADD;
+        bool used_standard_planning = false;
 
-    // Add the object to the scene
-    std::vector<moveit_msgs::msg::CollisionObject> collision_objects;
-    collision_objects.push_back(table);
-    planning_scene_interface.addCollisionObjects(collision_objects);
+        // Phase 1: Approach start position if far away
+        if (distance > distance_threshold_) {
+            RCLCPP_INFO(this->get_logger(),
+                       "Phase 1: Using standard planning to approach start pose");
 
-    RCLCPP_INFO(logger, "Added 'table' collision object to planning scene at Z=0.0.");
-}
+            if (!move_to_pose(*move_group, raised_first_pose,
+                            "Failed to reach raised initial pose")) {
+                response->success = false;
+                response->message = "Failed to reach the raised initial pose with standard planning";
+                return;
+            }
+
+            used_standard_planning = true;
+            RCLCPP_INFO(this->get_logger(), "Successfully reached raised start position");
+        } else {
+            RCLCPP_INFO(this->get_logger(),
+                       "Phase 1: Distance within threshold. Using Cartesian path only");
+        }
+
+        // Phase 2: Execute drawing path
+        RCLCPP_INFO(this->get_logger(), "Phase 2: Executing drawing path");
+
+        // Setup orientation constraints
+        setup_orientation_constraints(*move_group, first_pose);
+
+        // Build waypoint list
+        std::vector<geometry_msgs::msg::Pose> waypoints;
+
+        // If we're at raised position, lower to first pose
+        if (used_standard_planning) {
+            waypoints.push_back(raised_first_pose);
+        }
+
+        // Add all target poses
+        for (const auto& pose : request->target_poses) {
+            waypoints.push_back(pose);
+        }
+
+        // Raise pen at the end
+        auto final_raised_pose = create_raised_pose(request->target_poses.back());
+        waypoints.push_back(final_raised_pose);
+
+        // Execute the Cartesian path
+        std::string message;
+        response->success = execute_cartesian_path(*move_group, waypoints, message);
+        response->message = message;
+    }
+};
 
 int main(int argc, char* argv[])
 {
     rclcpp::init(argc, argv);
-    auto const node = std::make_shared<rclcpp::Node>(
-        "moveit_draw_stroke_server",
-        rclcpp::NodeOptions().automatically_declare_parameters_from_overrides(true)
-    );
 
-    add_collision_object();
+    auto node = std::make_shared<DrawStrokeServer>();
 
-    // Create the Service Server using the custom DrawStroke service type
-    rclcpp::Service<DrawStroke>::SharedPtr service =
-        node->create_service<DrawStroke>(
-            "moveit_draw_stroke", // The name of your service
-            [&node](
-                const std::shared_ptr<rmw_request_id_t>& header,
-                const DrawStroke::Request::SharedPtr request,
-                const DrawStroke::Response::SharedPtr response)
-            {
-                // Pass all four arguments to the updated handler
-                handle_stroke_service(node, header, request, response);
-            });
-    RCLCPP_INFO(rclcpp::get_logger("moveit_pose_service_server"), "DrawStroke Service Server is ready at /moveit_draw_stroke.");
+    // Create executor and spin in a separate thread
+    rclcpp::executors::SingleThreadedExecutor executor;
+    executor.add_node(node);
+    std::thread spinner = std::thread([&executor]() { executor.spin(); });
 
-    rclcpp::spin(node);
+    RCLCPP_INFO(node->get_logger(), "Executor spinning in background thread");
+
+    // Wait for planning scene to be ready, then add collision objects
+    rclcpp::sleep_for(std::chrono::seconds(2));
+    node->add_collision_objects();
+
+    // Wait for the spinner thread to finish (will run until shutdown)
+    spinner.join();
+
     rclcpp::shutdown();
     return 0;
 }
