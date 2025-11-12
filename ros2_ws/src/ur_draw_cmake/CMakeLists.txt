@@ -31,8 +31,6 @@ install(DIRECTORY launch
   DESTINATION share/${PROJECT_NAME}/)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
-  "action/DrawStroke.action"
-  "srv/MoveToPose.srv"
   "srv/DrawStroke.srv"
   DEPENDENCIES geometry_msgs # This service depends on geometry_msgs/Pose
 )

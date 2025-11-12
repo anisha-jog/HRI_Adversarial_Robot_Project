@@ -195,16 +195,6 @@ def generate_launch_description():
                     '0', '--frame-id', 'base_link', '--child-frame-id', 'image_frame']
             )
 
-    static_pen_frame_pub = Node(
-                package='tf2_ros',
-                executable='static_transform_publisher',
-                arguments=[
-                    # TODO adjust these values based on our setup
-                    '--x', '0.02', '--y', '0', '--z', '0.01',
-                    '--yaw', '0', '--pitch', '-1.57725', '--roll',
-                    '0', '--frame-id', 'tool0', '--child-frame-id', 'pen_frame']
-            )
-
     robot_description = get_robot_description(ur_type,robot_ip)
     robot_description_semantic = get_robot_description_semantic()
 
@@ -220,9 +210,8 @@ def generate_launch_description():
     )
 
     # bass source /ros2_ws/install/setup.bash
-    # ros2 launch ur5_draw ur5_draw.launch.py enable_sim:=true launch_rviz:=false
-    # ros2 launch ur5_draw ur5_draw.launch.py enable_sim:=true launch_rviz:=false initial_joint_controller:=forward_position_controller
-    # ros2 launch ur_moveit_config ur_moveit.launch.py ur_type:=ur5 use_sim_time:=true launch_rviz:=true
+    # ros2 launch ur5_draw ur5_draw.launch.py enable_sim:=true
+    # ros2 run ur5_draw draw_svg_action.py
 
     return LaunchDescription([
         enable_sim_arg,
@@ -231,7 +220,6 @@ def generate_launch_description():
         set_x_offset,
         set_y_offset,
         static_img_frame_pub,
-        # static_pen_frame_pub,
         moveit_service,
 
         # Launches the appropriate UR driver setup

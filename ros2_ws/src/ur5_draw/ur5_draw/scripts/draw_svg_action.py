@@ -14,10 +14,9 @@ from tf2_geometry_msgs import do_transform_pose
 from copy import deepcopy
 import numpy as np
 
-from ur_draw_cmake.srv import MoveToPose
 from ur_draw_cmake.srv import DrawStroke
 
-PEN_HEIGHT = .3
+PEN_HEIGHT = .05
 HOME_POSE = Pose(position=Point(x=0.20, y=0.0, z=0.5),orientation=Quaternion(w=.707,x=-.707))
 TEST_STROKE = [
     (0.1, 0.1),
@@ -32,20 +31,15 @@ class DrawSVG(Node):
         super().__init__('draw_svg')
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self)
-        # self.client = self.create_client(MoveToPose, 'moveit_to_pose')
+
         self.client = self.create_client(DrawStroke, 'moveit_draw_stroke')
         while not self.client.wait_for_service(timeout_sec=1.0):
             self.get_logger().info('Service not available, waiting again...')
-        # self.request = MoveToPose.Request()
         self.request = DrawStroke.Request()
 
         self.image_to_world_t = self.get_img_transform('image_frame', 'world')
-        # self.tool_to_frame = self.get_img_transform('tool0', 'pen_frame')
-        # self.tool_to_frame = self.get_img_transform('pen_frame', 'tool0')
         self.get_logger().info('Transform successfully retrieved and cached.')
-        self.des_pose_pub = self.create_publisher(PoseStamped,'des_pose',10)
-        self.des_pose = PoseStamped()
-        self.des_pose.header.frame_id = "world"
+
         self.img_viz_pub = self.create_publisher(Marker, 'image_viz', 10)
         self.img_viz = Marker()
         self.img_viz.header.frame_id = 'world'
@@ -53,7 +47,7 @@ class DrawSVG(Node):
         self.img_viz.scale.x = 0.002
         self.img_viz.color.a = 1.0
         self.img_viz.color.r = 1.0
-        self.img_viz.points = [] # May need to set a starting point
+        self.img_viz.points = []
 
     def get_img_transform(self, source_frame, target_frame):
         wait_duration_sec = 5.0
@@ -88,69 +82,10 @@ class DrawSVG(Node):
              self.get_logger().error(f"Transform lookup failed after waiting: {ex}")
              sys.exit(1)
 
-    def go_home(self):
-        home_pose_world = do_transform_pose(HOME_POSE, self.image_to_world_t)
-        # home_pose_world = do_transform_pose(do_transform_pose(HOME_POSE, self.image_to_world_t),self.tool_to_frame)
-        # future = self.send_request(home_pose_world)
-        future = self.send_request([home_pose_world,])
-        rclpy.spin_until_future_complete(self, future)
-        if future.result() is not None:
-            self.get_logger().info("Returned to home position successfully.")
-        else:
-            self.get_logger().error("Service call to return home failed.")
-
-    def send_request(self, pose):
-        self.request.target_pose = pose
-        self.get_logger().info("Sending request to move to the target pose...")
-        return self.client.call_async(self.request)
-
     def send_traj_request(self, poses):
         self.request.target_poses = poses
         self.get_logger().info("Sending request to move to the target pose...")
         return self.client.call_async(self.request)
-
-    def draw_point(self, x, y):
-        img_pose = Pose()
-        img_pose.position.x = x
-        img_pose.position.y = y
-        img_pose.position.z = 0.0
-
-        img_pose.orientation.w = 0.707
-        img_pose.orientation.x = -0.707
-        img_pose.orientation.y = 0.0
-        img_pose.orientation.z = 0.0
-
-
-        world_pose = do_transform_pose(img_pose, self.image_to_world_t)
-        # tool_pose = Pose(position=world_pose.position,orientation=world_pose.orientation)
-        tool_pose = deepcopy(world_pose)
-        tool_pose.position.z = PEN_HEIGHT
-        # tool_pose = do_transform_pose(world_pose,self.tool_to_frame)
-        self.des_pose.pose = tool_pose
-        self.des_pose.header.stamp = self.get_clock().now().to_msg()
-        self.des_pose_pub.publish(self.des_pose)
-
-
-        # future = self.send_request(world_pose)
-        future = self.send_request(tool_pose)
-        rclpy.spin_until_future_complete(self, future)
-        if future.result() is not None:
-            self.get_logger().info(f"Move completed successfully. {future.result()}")
-            t = self.get_img_transform("tool0","world")
-            self.get_logger().info(f"T:({t.transform.translation.x },{t.transform.translation.y },{t.transform.translation.z }) {t.transform.rotation }")
-            self.get_logger().info(f"P:({self.des_pose.pose.position.x },{self.des_pose.pose.position.y },{self.des_pose.pose.position.z }) {self.des_pose.pose.orientation }")
-        else:
-            self.get_logger().error("Service call failed.")
-
-        self.img_viz.points.append(world_pose.position)
-        self.img_viz.header.stamp = self.get_clock().now().to_msg()
-        self.img_viz_pub.publish(self.img_viz)
-
-    def draw_stroke(self, points):
-        for point in points:
-            self.draw_point(point[0], point[1])
-        self.go_home()
-
 
     def draw_stroke_traj(self, points):
         pose_list = []
@@ -171,14 +106,16 @@ class DrawSVG(Node):
             self.des_pose.header.stamp = self.get_clock().now().to_msg()
             self.des_pose_pub.publish(self.des_pose)
             pose_list.append(world_pose)
+            self.img_viz.points.append(world_pose.position)
+            self.img_viz.header.stamp = self.get_clock().now().to_msg()
+            self.img_viz_pub.publish(self.img_viz)
 
-        self.send_traj_request(pose_list)
-
-
-
-
-
-
+        future = self.send_traj_request(pose_list)
+        rclpy.spin_until_future_complete(self, future)
+        if future.result() is not None:
+            self.get_logger().info(f"Move completed {'' if future.result().success else 'un'}successfully. {future.result().message}")
+        else:
+            self.get_logger().error("Service call failed.")
 
 def main(args=None):
     rclpy.init(args=args)

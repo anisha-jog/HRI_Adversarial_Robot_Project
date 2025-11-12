@@ -6,6 +6,9 @@ services:
 
     container_name: ur5_humble_dev
 
+    security_opt:
+      - seccomp:unconfined
+
     volumes:
       - ./../ros2_ws:/ros2_ws
 
