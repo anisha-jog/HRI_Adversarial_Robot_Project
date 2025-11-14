@@ -1,5 +1,5 @@
 # Gemini API Configuration
-API_KEY = 'AIzaSyCOA762wyugeTvRWh9cZ3Jek9LbGxn6SyQ'
+API_KEY = ''
 
 # Canvas configuration
 RESOLUTION = 40
