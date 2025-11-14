@@ -6,11 +6,11 @@ package_name = 'ur5_draw'
 
 setup(
     name=package_name,
-    version='0.0.0',
+    version='0.0.1',
     packages=find_packages(exclude=['test']),
     data_files=[
         (os.path.join('share', package_name), glob(f'{package_name}/launch/*launch.py')),
-        (os.path.join('lib', package_name), glob(f'{package_name}/scripts/*.py')),
+        # (os.path.join('lib', package_name), glob(f'{package_name}/scripts/*.py')),
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
@@ -28,6 +28,7 @@ setup(
     },
     entry_points={
         'console_scripts': [
+            'draw = ur5_draw.draw_svg_action:main',
         ],
     },
 )

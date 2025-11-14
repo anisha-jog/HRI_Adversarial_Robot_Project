@@ -13,9 +13,12 @@ from tf2_ros.transform_listener import TransformListener
 from tf2_geometry_msgs import do_transform_pose
 from copy import deepcopy
 import numpy as np
+import cv2
 
+from ur5_draw.image_to_svg import image_to_lines
 from ur_draw_cmake.srv import DrawStroke
 
+IN_TO_M = 0.0254
 PEN_HEIGHT = .05
 HOME_POSE = Pose(position=Point(x=0.20, y=0.0, z=0.5),orientation=Quaternion(w=.707,x=-.707))
 TEST_STROKE = [
@@ -27,7 +30,7 @@ TEST_STROKE = [
 ]
 
 class DrawSVG(Node):
-    def __init__(self):
+    def __init__(self,img_width,img_length):
         super().__init__('draw_svg')
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self)
@@ -48,6 +51,12 @@ class DrawSVG(Node):
         self.img_viz.color.a = 1.0
         self.img_viz.color.r = 1.0
         self.img_viz.points = []
+
+        self.img_width = img_width
+        self.img_length = img_length
+
+        self.page_length_m =  11 * IN_TO_M
+        self.page_width_m = 8.5 * IN_TO_M
 
     def get_img_transform(self, source_frame, target_frame):
         wait_duration_sec = 5.0
@@ -92,8 +101,8 @@ class DrawSVG(Node):
         for point in points:
             x, y = point
             img_pose = Pose()
-            img_pose.position.x = x
-            img_pose.position.y = y
+            img_pose.position.x = x/self.img_length * self.page_length_m
+            img_pose.position.y = y/self.img_width * self.page_width_m
             img_pose.position.z = PEN_HEIGHT
 
             img_pose.orientation.w = 0.707
@@ -101,15 +110,15 @@ class DrawSVG(Node):
             img_pose.orientation.y = 0.0
             img_pose.orientation.z = 0.0
 
+            tool_pose = deepcopy(img_pose)
+            tool_pose.position.z = 0.0
             world_pose = do_transform_pose(img_pose, self.image_to_world_t)
-            self.des_pose.pose = world_pose
-            self.des_pose.header.stamp = self.get_clock().now().to_msg()
-            self.des_pose_pub.publish(self.des_pose)
             pose_list.append(world_pose)
-            self.img_viz.points.append(world_pose.position)
+            self.img_viz.points.append(do_transform_pose(tool_pose,self.image_to_world_t).position)
             self.img_viz.header.stamp = self.get_clock().now().to_msg()
             self.img_viz_pub.publish(self.img_viz)
 
+        self.get_logger().info("Sending Trajectory to service")
         future = self.send_traj_request(pose_list)
         rclpy.spin_until_future_complete(self, future)
         if future.result() is not None:
@@ -119,13 +128,21 @@ class DrawSVG(Node):
 
 def main(args=None):
     rclpy.init(args=args)
+    test_img = cv2.imread('/ros2_ws/test.jpg')
+    height, width, channels = test_img.shape
+    strokes = image_to_lines(test_img)
 
-    draw_svg_node = DrawSVG()
+    print(*[f"{i}::{len(s)}\n" for i,s in enumerate(strokes)])
+
+    draw_svg_node = DrawSVG(img_length=height,img_width=width)
 
     try:
         # draw_svg_node.go_home()
         # draw_svg_node.draw_stroke(TEST_STROKE)
-        draw_svg_node.draw_stroke_traj(TEST_STROKE)
+        # draw_svg_node.draw_stroke_traj(TEST_STROKE)
+        for i,stroke in enumerate(strokes):
+            draw_svg_node.get_logger().info(f"Starting stroke {i} of length {len(stroke)}")
+            draw_svg_node.draw_stroke_traj(stroke)
         # rclpy.spin(draw_svg_node)
     except KeyboardInterrupt:
         pass
