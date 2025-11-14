@@ -40,9 +40,9 @@ ANTAGONISTIC = {
     "compositional": COMPOSITIONAL["different"]
 }
 CUSTOM = {
-    "visual": VISUAL["similar"],
-    "semantic": SEMANTIC["similar"],
-    "compositional": COMPOSITIONAL["similar"]
+    "visual": VISUAL["neutral"],
+    "semantic": SEMANTIC["neutral"],
+    "compositional": COMPOSITIONAL["neutral"]
 }
 MODELS = {
     "collaborative": COLLABORATIVE,
@@ -59,13 +59,24 @@ Given this partial drawing from the user, infer the general context that the use
 Always explain your reasoning before generating the next stroke suggestion.
 You must keep this format for the new drawing:
 1. Keep the original drawing intact.
-2. Overlay new drawing with red strokes on the original drawing.
+2. Overlay new drawing with red strokes on the original drawing, make sure to not draw over the original drawing unless necessary.
 3. The thickness of new strokes should uniform, which is same as the thickness of the user's strokes.
 4. Do not use blocks of color, only use lines.
 5. The return canvas resolution should be {canvas_size}.
 6. The new drawing should be feasible to draw with only lines and it is simple enough so that we can be drawn within 5 strokes.
 """
 
+SUBSEQUENT_PROMPT = """
+Remeber your previous response. 
+Continue to build upon the existing drawing by adding new strokes in red.
+
+As before, follow these guidelines:
+1. Keep the original drawing intact.
+2. Overlay new drawing with red strokes on the original drawing, make sure to not draw over the original drawing unless necessary.
+3. The thickness of new strokes should uniform, which is same as the thickness of the user's strokes.
+4. Do not use blocks of color, only use lines.
+5. The return canvas resolution should be {canvas_size}.
+6. The new drawing should be feasible to draw with only lines and it is simple enough so that we can be drawn within 5 strokes."""
 
 ### Original prompt: 
 """

@@ -6,7 +6,7 @@ import io
 import image_to_svg
 import os
 import sys
-from config import API_KEY, CANVAS_SIZE, GEMINI_PROMPT, MODELS
+from config import API_KEY, CANVAS_SIZE, GEMINI_PROMPT, SUBSEQUENT_PROMPT, MODELS
 
 module_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../tests'))
 sys.path.insert(0, module_dir)
