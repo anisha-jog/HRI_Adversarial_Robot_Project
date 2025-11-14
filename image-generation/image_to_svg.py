@@ -67,12 +67,12 @@ def bitmap_to_lines(bitmap):
   return lines
 
 # Create SVG from image (i.e. additional threshhold operation), also returns the points for each line
-def image_to_svg(image, filename="out.svg"):
+def image_to_svg(image, filename="out.svg", low=200, high=255):
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    _, binary = cv2.threshold(gray, 200, 255, cv2.THRESH_BINARY_INV)
+    _, binary = cv2.threshold(gray, low, high, cv2.THRESH_BINARY_INV)
     return bitmap_to_svg(binary, filename)
 
-def image_to_lines(image):
+def image_to_lines(image, low=200, high=255):
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    _, binary = cv2.threshold(gray, 200, 255, cv2.THRESH_BINARY_INV)
+    _, binary = cv2.threshold(gray, low, high, cv2.THRESH_BINARY_INV)
     return bitmap_to_lines(binary)
