@@ -13,6 +13,8 @@
 
 #include "ur_draw_cmake/srv/draw_stroke.hpp"
 
+const double ARM_BOUNDS = 0.7;
+
 class DrawStrokeServer : public rclcpp::Node
 {
 public:
@@ -21,9 +23,9 @@ public:
                rclcpp::NodeOptions().automatically_declare_parameters_from_overrides(true)),
           planning_group_("ur_manipulator"),
           raised_pen_height_(0.01),
-          distance_threshold_(0.1),
-          eef_step_(0.005),
-          cartesian_fraction_threshold_(0.9)
+          distance_threshold_(0.5),
+          eef_step_(0.001),
+          cartesian_fraction_threshold_(0.65)
     {
         // Declare and get parameters
         this->declare_parameter("planning_group", planning_group_);
@@ -51,6 +53,7 @@ public:
         RCLCPP_INFO(this->get_logger(), "  Raised pen height: %.3f m", raised_pen_height_);
         RCLCPP_INFO(this->get_logger(), "  Distance threshold: %.3f m", distance_threshold_);
         RCLCPP_INFO(this->get_logger(), "Service ready at: /moveit_draw_stroke");
+        first_move_ = true;
     }
 
     /**
@@ -88,6 +91,42 @@ public:
         table.primitives.push_back(primitive);
         table.primitive_poses.push_back(table_pose);
 
+        // Define table as a box
+        shape_msgs::msg::SolidPrimitive primitive_wall_1;
+        primitive_wall_1.type = primitive_wall_1.BOX;
+        primitive_wall_1.dimensions.resize(3);
+        primitive_wall_1.dimensions[0] = 2.0;
+        primitive_wall_1.dimensions[1] = .005;
+        primitive_wall_1.dimensions[2] = 2.0;
+
+        // Position the table
+        geometry_msgs::msg::Pose table_pose_wall_1;
+        table_pose_wall_1.orientation.w = 1.0;
+        table_pose_wall_1.position.x = 0.0;
+        table_pose_wall_1.position.y = -1*ARM_BOUNDS;
+        table_pose_wall_1.position.z = 0.0;
+
+        table.primitives.push_back(primitive_wall_1);
+        table.primitive_poses.push_back(table_pose_wall_1);
+
+        // Define table as a box
+        shape_msgs::msg::SolidPrimitive primitive_wall_2;
+        primitive_wall_2.type = primitive_wall_2.BOX;
+        primitive_wall_2.dimensions.resize(3);
+        primitive_wall_2.dimensions[0] = 2.0;
+        primitive_wall_2.dimensions[1] = .005;
+        primitive_wall_2.dimensions[2] = 2.0;
+
+        // Position the table
+        geometry_msgs::msg::Pose table_pose_wall_2;
+        table_pose_wall_2.orientation.w = 1.0;
+        table_pose_wall_2.position.x = 0.0;
+        table_pose_wall_2.position.y = ARM_BOUNDS;
+        table_pose_wall_2.position.z = 0.0;
+
+        table.primitives.push_back(primitive_wall_2);
+        table.primitive_poses.push_back(table_pose_wall_2);
+
         // Add to scene
         std::vector<moveit_msgs::msg::CollisionObject> collision_objects;
         collision_objects.push_back(table);
@@ -118,6 +157,7 @@ private:
     double distance_threshold_;
     double eef_step_;
     double cartesian_fraction_threshold_;
+    bool first_move_;
 
     /**
      * @brief Calculate Euclidean distance between two poses
@@ -209,7 +249,7 @@ private:
      */
     bool execute_cartesian_path(
         moveit::planning_interface::MoveGroupInterface& move_group,
-        const std::vector<geometry_msgs::msg::Pose>& waypoints,
+        const std::vector<geometry_msgs::msg::Pose>& waypoints,bool run_fast,
         std::string& message)
     {
         RCLCPP_INFO(this->get_logger(),
@@ -218,9 +258,17 @@ private:
         moveit_msgs::msg::RobotTrajectory trajectory;
         const double jump_threshold = 0.0; // Prevent joint jumps
 
+        double eef_step_final;
+        if (run_fast){
+            eef_step_final = eef_step_ * 20;
+        }
+        else{
+            eef_step_final = eef_step_;
+        }
+
         double fraction = move_group.computeCartesianPath(
             waypoints,
-            eef_step_,
+            eef_step_final,
             jump_threshold,
             trajectory,
             true // avoid_collisions
@@ -294,7 +342,7 @@ private:
         bool used_standard_planning = false;
 
         // Phase 1: Approach start position if far away
-        if (distance > distance_threshold_) {
+        if ((distance > distance_threshold_) || first_move_) {
             RCLCPP_INFO(this->get_logger(),
                        "Phase 1: Using standard planning to approach start pose");
 
@@ -304,6 +352,7 @@ private:
                 response->message = "Failed to reach the raised initial pose with standard planning";
                 return;
             }
+            first_move_ = false;
 
             used_standard_planning = true;
             RCLCPP_INFO(this->get_logger(), "Successfully reached raised start position");
@@ -315,16 +364,29 @@ private:
         // Phase 2: Execute drawing path
         RCLCPP_INFO(this->get_logger(), "Phase 2: Executing drawing path");
 
+        if (!used_standard_planning) {
+            std::vector<geometry_msgs::msg::Pose> prior_waypoints;
+            std::string prior_message;
+            // prior_waypoints.push_back(current_pose);
+            prior_waypoints.push_back(raised_first_pose);
+            setup_orientation_constraints(*move_group, raised_first_pose);
+            bool sub_success = execute_cartesian_path(*move_group, prior_waypoints,true ,prior_message);
+            RCLCPP_INFO(this->get_logger(), "Submove message: %s", prior_message.c_str());
+            if (!sub_success){
+                RCLCPP_WARN(this->get_logger(), "Cartesian first move failed trying direct move to pose");
+                if (!move_to_pose(*move_group, raised_first_pose,
+                                "Failed to reach raised initial pose")) {
+                    response->success = false;
+                    response->message = "Failed to reach the raised initial pose with standard planning";
+                    return;
+                }
+            }
+        }
         // Setup orientation constraints
         setup_orientation_constraints(*move_group, first_pose);
 
         // Build waypoint list
         std::vector<geometry_msgs::msg::Pose> waypoints;
-
-        // If we're at raised position, lower to first pose
-        if (used_standard_planning) {
-            waypoints.push_back(raised_first_pose);
-        }
 
         // Add all target poses
         for (const auto& pose : request->target_poses) {
@@ -337,7 +399,7 @@ private:
 
         // Execute the Cartesian path
         std::string message;
-        response->success = execute_cartesian_path(*move_group, waypoints, message);
+        response->success = execute_cartesian_path(*move_group, waypoints, false ,message);
         response->message = message;
     }
 };
