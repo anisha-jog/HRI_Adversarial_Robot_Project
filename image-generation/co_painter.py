@@ -42,7 +42,9 @@ def run_application():
             new_drawing[:] = 255
         elif key == ord('s'):
             print("Saving new strokes to 'robot_path.svg'")
-            lines = image_to_svg.image_to_svg(new_drawing, filename="robot_path.svg")
+            #lines = image_to_svg.image_to_svg(new_drawing, filename="robot_path.svg")
+            print("Saving full canvas to 'full_canvas.png'")
+            cv2.imwrite("full_canvas.png", canvas)
             # print("Lines:", lines) # This is x,y robot trajectory points
             # print("Saving full_canvas to 'full.svg'")
             # image_to_svg.image_to_svg(canvas, filename="full.svg")

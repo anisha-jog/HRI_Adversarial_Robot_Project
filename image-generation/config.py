@@ -8,14 +8,14 @@ CANVAS_SIZE = (int(PAGE_SIZE[1] * RESOLUTION), int(PAGE_SIZE[0] * RESOLUTION), 3
 
 # Axes of "Adversarial" Change
 VISUAL = {
-    "similar": "Very similar in shape",
-    "neutral": "Slightly different to in shape",
-    "different": "Very different in shape"
+    "similar": "Very similar in shape, geometry, and style",
+    "neutral": "Slightly different in shape, geometry, and style",
+    "different": "Very different in shape, geometry, and style"
 }
 SEMANTIC = {
-    "similar": "Very similar in concept",
-    "neutral": "Slightly different in concept",
-    "different": "Very different in concept"
+    "similar": "Very similar in concept or meaning",
+    "neutral": "Slightly different in concept or meaning",
+    "different": "Very different in concept or meaning"
 }
 COMPOSITIONAL = {
     "similar": "Very similar in composition, balance or layout",
@@ -40,9 +40,9 @@ ANTAGONISTIC = {
     "compositional": COMPOSITIONAL["different"]
 }
 CUSTOM = {
-    "visual": VISUAL["neutral"],
-    "semantic": SEMANTIC["neutral"],
-    "compositional": COMPOSITIONAL["neutral"]
+    "visual": VISUAL["similar"],
+    "semantic": SEMANTIC["similar"],
+    "compositional": COMPOSITIONAL["similar"]
 }
 MODELS = {
     "collaborative": COLLABORATIVE,
@@ -59,11 +59,12 @@ Given this partial drawing from the user, infer the general context that the use
 Always explain your reasoning before generating the next stroke suggestion.
 You must keep this format for the new drawing:
 1. Keep the original drawing intact.
-2. Overlay new drawing with red strokes on the original drawing, make sure to not draw over the original drawing unless necessary.
-3. The thickness of new strokes should uniform, which is same as the thickness of the user's strokes.
-4. Do not use blocks of color, only use lines.
-5. The return canvas resolution should be {canvas_size}.
-6. The new drawing should be feasible to draw with only lines and it is simple enough so that we can be drawn within 5 strokes.
+2. Overlay new drawing with red strokes on the original drawing.
+3. Do not draw over the original drawing.
+4. The thickness of new strokes should uniform, which is same as the thickness of the user's strokes.
+5. Do not use blocks of color, only use lines.
+6. The return canvas resolution should be {canvas_size}.
+7. The new drawing should be feasible to draw with only lines and it is simple enough so that we can be drawn within 5 strokes.
 """
 
 SUBSEQUENT_PROMPT = """
