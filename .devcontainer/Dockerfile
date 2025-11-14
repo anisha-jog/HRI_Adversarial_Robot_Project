@@ -4,10 +4,15 @@ FROM osrf/ros:humble-desktop
 # Set environment variables for non-interactive install
 ENV DEBIAN_FRONTEND=noninteractive
 
+RUN apt-get update && apt-get install -y software-properties-common
+RUN add-apt-repository ppa:fish-shell/release-4
+
 # Install necessary packages: UR Driver, OpenCV, venv, and build tools
 RUN apt-get update && apt-get install -y \
+    ros-humble-moveit \
     ros-humble-ur-robot-driver \
     ros-humble-ur-simulation-gz \
+    ros-humble-ur-bringup \
     python3-opencv \
     python3-pip \
     python3-venv \
@@ -18,6 +23,7 @@ RUN apt-get update && apt-get install -y \
     iputils-ping \
     dos2unix \
     git \
+    software-properties-common \
     && rm -rf /var/lib/apt/lists/*
 
 # --- Workspace and Venv Setup ---
