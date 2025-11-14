@@ -3,10 +3,10 @@ import numpy as np
 import google.generativeai as genai
 from PIL import Image
 import io
-import image_to_svg
+import image_to_svg as im
 import os
 import sys
-from config import API_KEY, CANVAS_SIZE, GEMINI_PROMPT, SUBSEQUENT_PROMPT, MODELS
+from config import API_KEY, CANVAS_SIZE, GEMINI_PROMPT, SUBSEQUENT_PROMPT, CONDITIONS
 
 module_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../tests'))
 sys.path.insert(0, module_dir)
@@ -18,8 +18,8 @@ genai.configure(api_key=API_KEY)
 drawing = False         # True if mouse is pressed
 last_point = (0, 0)     # Last known mouse position
 canvas = np.full(CANVAS_SIZE, 255, dtype=np.uint8) # White canvas
-old_drawing = np.full(CANVAS_SIZE, 255, dtype=np.uint8) # White canvas
-new_drawing = np.full(CANVAS_SIZE, 255, dtype=np.uint8) # White canvas
+previous_canvas = np.full(CANVAS_SIZE, 255, dtype=np.uint8) # White canvas
+robot_turn = np.full(CANVAS_SIZE, 255, dtype=np.uint8) # White canvas
 
 def separate_colors(img):
     data = np.array(img)
@@ -83,30 +83,35 @@ def blackize(image_data):
     img_rgb = cv2.cvtColor(img_bw, cv2.COLOR_GRAY2RGB)
     return img_rgb
 
-# --- 4. Gemini API Function ---
-def get_gemini_drawing(image_data, MODEL = MODELS["custom"]):
+def initialize_gemini_api(API_KEY):
+    """Initializes the Gemini API with the provided API key."""
+    genai.configure(api_key=API_KEY)
+
+def get_model():
+    """Updates the Gemini model to ensure the latest version is used."""
+    model = genai.GenerativeModel('gemini-2.5-flash-image')
+    return model
+
+def get_gemini_drawing(image_data, prompt, model, condition = CONDITIONS["custom"]):
     """Sends the current canvas to Gemini and returns the modified image."""
-    NEW_PROMPT = GEMINI_PROMPT + f"""
-        For each attribute of the drawing, the style ranges from different, related but not identical, to similar.
-        For this drawing, use the following attributes in your response:
-        (1) {MODEL['visual']}
-        (2) {MODEL['semantic']}
-        (3) {MODEL['compositional']}
-        """
+    NEW_PROMPT = prompt
+    if condition is not None:
+        NEW_PROMPT = NEW_PROMPT + f"""
+            (1) {condition['visual']}
+            (2) {condition['semantic']}
+            (3) {condition['compositional']}
+            """
+
     prompt = NEW_PROMPT.format(canvas_size=CANVAS_SIZE)
-    
-    print("Sending to Gemini... this may take a moment.")
-    
+        
     # Convert OpenCV image (BGR) to PIL Image (RGB)
     # convert image into only black and white. not even gray
     img_rgb = blackize(image_data)
-    old_drawing[:] = np.array(img_rgb)
+    previous_canvas[:] = np.array(img_rgb)
     img_rgb = cv2.resize(img_rgb, (1024, 1024))
     pil_img = Image.fromarray(img_rgb)
     
-    # --- Make sure you are using the image generation model! ---
-    model = genai.GenerativeModel('gemini-2.5-flash-image')
-    
+    print("Sending to Gemini... this may take a moment.")
     try:
         # Send the prompt and the image to the model
         response = model.generate_content([prompt, pil_img])
@@ -140,10 +145,9 @@ def get_gemini_drawing(image_data, MODEL = MODELS["custom"]):
                     cv_output_img = cv2.resize(cv_output_img, (CANVAS_SIZE[1], CANVAS_SIZE[0]))
 
                     old, new = separate_colors(cv_output_img)
-                    new_drawing[:] = np.array(new)
-                    cv_output_img = (old_drawing, new_drawing, combine_images(old_drawing, new_drawing))
-
-
+                    robot_turn[:] = np.array(new)
+                    traj = im.convert_pixels_to_meters(im.image_to_lines(np.array(robot_turn), segments=10), robot_turn.shape[0], robot_turn.shape[1])
+                    cv_output_img = (previous_canvas, robot_turn, combine_images(previous_canvas, robot_turn), traj)
                     print("Got new drawing from Gemini!")
                     return cv_output_img
         print("------------------------------------------------")

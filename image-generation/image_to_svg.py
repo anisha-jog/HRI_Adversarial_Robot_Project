@@ -18,6 +18,43 @@ def create_svg(lines, filename, width, height):
       dwg.add(dwg.polyline(points, stroke=svgwrite.rgb(0, 0, 0, '%'), fill='none', stroke_width=2))
     dwg.save()
     print(f"SVG file '{filename}' created.")
+  
+def convert_pixels_to_inches(lines, img_height, img_width, target_height_in=11, target_width_in=8.5):
+    """
+    Converts a list of lines with (x, y) points from pixels to inches.
+    """
+    scale_x = target_width_in / img_width
+    scale_y = target_height_in / img_height
+    lines_in_inches = []
+    for points in lines:
+        converted_points = [(x * scale_x, y * scale_y) for (x, y) in points]
+        lines_in_inches.append(converted_points)
+    return lines_in_inches
+
+def convert_pixels_to_millimeters(lines, img_height, img_width, target_height_mm=279.4, target_width_mm=215.9):
+    """
+    Converts a list of lines with (x, y) points from pixels to millimeters.
+    """
+    scale_x = target_width_mm / img_width
+    scale_y = target_height_mm / img_height
+    lines_in_mm = []
+    for points in lines:
+        converted_points = [(x * scale_x, y * scale_y) for (x, y) in points]
+        lines_in_mm.append(converted_points)
+    return lines_in_mm
+
+def convert_pixels_to_meters(lines, img_height, img_width, target_height_m=0.2794, target_width_m=0.2159):
+    """
+    Converts a list of lines with (x, y) points from pixels to meters.
+    """
+    scale_x = target_width_m / img_width
+    scale_y = target_height_m / img_height
+    lines_in_m = []
+    for points in lines:
+        converted_points = [(x * scale_x, y * scale_y) for (x, y) in points]
+        lines_in_m.append(converted_points)
+    return lines_in_m
+
 def bezier_to_points(p1, c1, c2, p2, segments=10):
     """
     Approximates a cubic Bezier curve with a series of line segments.
@@ -33,7 +70,7 @@ def bezier_to_points(p1, c1, c2, p2, segments=10):
         acc.append((x, y))
     return acc
 
-def linearize_bezier(path):
+def linearize_bezier(path, segments=10):
   lines = []
   for curve in path:
     # Add the starting point of each curve
@@ -47,32 +84,32 @@ def linearize_bezier(path):
           c1 = (segment.c1.x, segment.c1.y)
           c2 = (segment.c2.x, segment.c2.y)
           p2 = (segment.end_point.x, segment.end_point.y)
-          bezier_points = bezier_to_points(p1, c1, c2, p2, segments=100)
+          bezier_points = bezier_to_points(p1, c1, c2, p2, segments=10)
           points.extend(bezier_points[1:]) 
     lines.append(points)
   return lines[1:]
 
 # Create SVG lines from bitmap, also returns the points for each line
-def bitmap_to_svg(bitmap, filename="out.svg"):
+def bitmap_to_svg(bitmap, filename="out.svg", segments=10):
   skeleton = skeletonize(bitmap)
   vector = Bitmap(skeleton).trace()
   lines = linearize_bezier(vector)
   create_svg(lines, filename, bitmap.shape[1], bitmap.shape[0])
   return lines
 
-def bitmap_to_lines(bitmap):
+def bitmap_to_lines(bitmap, segments=10):
   skeleton = skeletonize(bitmap)
   vector = Bitmap(skeleton).trace()
   lines = linearize_bezier(vector)
   return lines
 
 # Create SVG from image (i.e. additional threshhold operation), also returns the points for each line
-def image_to_svg(image, filename="out.svg", low=200, high=255):
+def image_to_svg(image, filename="out.svg", low=200, high=255, segments=10):
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     _, binary = cv2.threshold(gray, low, high, cv2.THRESH_BINARY_INV)
     return bitmap_to_svg(binary, filename)
 
-def image_to_lines(image, low=200, high=255):
+def image_to_lines(image, low=200, high=255, segments=10):
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     _, binary = cv2.threshold(gray, low, high, cv2.THRESH_BINARY_INV)
     return bitmap_to_lines(binary)

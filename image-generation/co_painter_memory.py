@@ -37,8 +37,9 @@ def run_application():
             print("Exiting...")
             break
         elif key == ord('a'):
-            model = get_model()
             (old_drawing, new_drawing, combined_drawing, traj) = get_gemini_drawing(canvas.copy(), prompt, model, condition)
+            prompt = SUBSEQUENT_PROMPT
+            condition = None
             if combined_drawing is not None:
                 canvas[:] = combined_drawing
         elif key == ord('c'):

@@ -1,5 +1,5 @@
 # Gemini API Configuration
-API_KEY = ''
+API_KEY = "AIzaSyCOA762wyugeTvRWh9cZ3Jek9LbGxn6SyQ"
 
 # Canvas configuration
 RESOLUTION = 40
@@ -8,9 +8,9 @@ CANVAS_SIZE = (int(PAGE_SIZE[1] * RESOLUTION), int(PAGE_SIZE[0] * RESOLUTION), 3
 
 # Axes of "Adversarial" Change
 VISUAL = {
-    "similar": "Very similar in shape, geometry, and style",
-    "neutral": "Slightly different in shape, geometry, and style",
-    "different": "Very different in shape, geometry, and style"
+    "similar": "Very similar in shape, geometry, or style",
+    "neutral": "Slightly different in shape, geometry, or style",
+    "different": "Very different in shape, geometry, or style"
 }
 SEMANTIC = {
     "similar": "Very similar in concept or meaning",
@@ -44,7 +44,7 @@ CUSTOM = {
     "semantic": SEMANTIC["similar"],
     "compositional": COMPOSITIONAL["similar"]
 }
-MODELS = {
+CONDITIONS = {
     "collaborative": COLLABORATIVE,
     "adversarial": ADVERSARIAL,
     "antagonistic": ANTAGONISTIC,
@@ -52,7 +52,6 @@ MODELS = {
 }
 
 # Main Gemini Prompt Template
-
 GEMINI_PROMPT ="""
 You are a creative painting agent collaborating with a user.
 Given this partial drawing from the user, infer the general context that the user is trying to draw, your role is not to imitate, but to continue the human drawing in a constructive, surprising, and meaningful way.
@@ -65,6 +64,10 @@ You must keep this format for the new drawing:
 5. Do not use blocks of color, only use lines.
 6. The return canvas resolution should be {canvas_size}.
 7. The new drawing should be feasible to draw with only lines and it is simple enough so that we can be drawn within 5 strokes.
+
+
+For each attribute of the drawing, the style ranges from different, related but not identical, to similar.
+For this drawing, use the following attributes in your response:
 """
 
 SUBSEQUENT_PROMPT = """
