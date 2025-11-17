@@ -10,7 +10,7 @@ from paint_with_gemini import (
 
 def run_application():
     new_drawing = np.full(CANVAS_SIZE, 255, dtype=np.uint8) # White canvas
-    image_path = "input/happy_face_doodle.jpg"
+    image_path = "input/full_canvas.png"
     test_drawing = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
     # add test drawing to canvas
     # resize test_drawing to fit in canvas
