@@ -7,6 +7,11 @@ import math
 import cv2
 import numpy as np
 
+def skeletonize_bitmap(bitmap):
+    binary_bitmap = bitmap > 0
+    skeleton = skeletonize(binary_bitmap)
+    return skeleton
+
 def create_svg(lines, filename, width, height):
     """
     Generates an SVG file using svgwrite from a list of (x, y) points.

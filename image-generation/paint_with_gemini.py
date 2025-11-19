@@ -3,7 +3,6 @@ import numpy as np
 import google.generativeai as genai
 from PIL import Image
 import io
-import image_to_svg as im
 import os
 import sys
 from config import API_KEY, CANVAS_SIZE, GEMINI_PROMPT, SUBSEQUENT_PROMPT, CONDITIONS
@@ -83,7 +82,7 @@ def blackize(image_data):
     img_rgb = cv2.cvtColor(img_bw, cv2.COLOR_GRAY2RGB)
     return img_rgb
 
-def initialize_gemini_api(API_KEY):
+def init_gemini_api(API_KEY):
     """Initializes the Gemini API with the provided API key."""
     genai.configure(api_key=API_KEY)
 
@@ -146,8 +145,7 @@ def get_gemini_drawing(image_data, prompt, model, condition = CONDITIONS["custom
 
                     old, new = separate_colors(cv_output_img)
                     robot_turn[:] = np.array(new)
-                    traj = im.convert_pixels_to_meters(im.image_to_lines(np.array(robot_turn), segments=10), robot_turn.shape[0], robot_turn.shape[1])
-                    cv_output_img = (previous_canvas, robot_turn, combine_images(previous_canvas, robot_turn), traj)
+                    cv_output_img = (previous_canvas, robot_turn, combine_images(previous_canvas, robot_turn))
                     print("Got new drawing from Gemini!")
                     return cv_output_img
         print("------------------------------------------------")

@@ -3,7 +3,7 @@ from config import CANVAS_SIZE, GEMINI_PROMPT, SUBSEQUENT_PROMPT, CONDITIONS
 from image_to_svg import image_to_svg
 from paint_with_gemini import (
     canvas,
-    draw_callback, get_gemini_drawing, initialize_gemini_api, get_model, API_KEY
+    draw_callback, get_gemini_drawing, init_gemini_api, get_model, API_KEY
 )
 
 def run_application():
@@ -21,7 +21,7 @@ def run_application():
     print("  - Press 'c' to clear the canvas.")
     print("  - Press 'q' or 'ESC' to quit.")
     print("  - Press 's' to save the current drawing as PNG and SVG.")
-    initialize_gemini_api(API_KEY)
+    init_gemini_api(API_KEY)
     model = get_model()
     prompt = GEMINI_PROMPT
     condition = CONDITIONS["adversarial"]
@@ -38,7 +38,7 @@ def run_application():
             break
         elif key == ord('a'):
             model = get_model()
-            (old_drawing, new_drawing, combined_drawing, traj) = get_gemini_drawing(canvas.copy(), prompt, model, condition)
+            (old_drawing, new_drawing, combined_drawing) = get_gemini_drawing(canvas.copy(), prompt, model, condition)
             if combined_drawing is not None:
                 canvas[:] = combined_drawing
         elif key == ord('c'):
@@ -48,7 +48,7 @@ def run_application():
             new_drawing[:] = 255
         elif key == ord('s'):
             print("Saving new strokes to 'robot_path.svg'")
-            image_to_svg.image_to_svg(new_drawing, filename="robot_path.svg")
+            image_to_svg(new_drawing, filename="robot_path.svg")
             
     cv2.destroyAllWindows()
 
