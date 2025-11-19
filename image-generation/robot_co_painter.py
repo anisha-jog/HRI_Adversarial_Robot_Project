@@ -73,17 +73,17 @@ def capture_camera_frame(cam):
         # print("Detected markers:", ids)
         if ids is not None:
             top_left = [1, 1]
-            top_right = [img_bw.shape[1]-2, 1]
-            bottom_right = [img_bw.shape[1]-2, img_bw.shape[0]-2]
-            bottom_left = [1, img_bw.shape[0]-2]
+            top_right = [img_bw.shape[1], 1]
+            bottom_right = [img_bw.shape[1], img_bw.shape[0]]
+            bottom_left = [1, img_bw.shape[0]]
             for i in range(ids.shape[0]):
                 # print(ids[i], corners[i])
                 if ids[i][0] == aruco_corner_order["bottom-right"]:
-                    bottom_right = corners[i][0][2]
+                    bottom_right = corners[i][0][0]
                 if ids[i][0] == aruco_corner_order["top-right"]:
-                    top_right = corners[i][0][2]
+                    top_right = corners[i][0][0]
                 if ids[i][0] == aruco_corner_order["bottom-left"]:
-                    bottom_left = corners[i][0][2]
+                    bottom_left = corners[i][0][0]
                 if ids[i][0] == aruco_corner_order["top-left"]:
                     top_left = corners[i][0][0]
             transformed_image = transform_image(img, [top_left, top_right, bottom_right, bottom_left])
