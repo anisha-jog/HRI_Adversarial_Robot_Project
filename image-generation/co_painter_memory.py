@@ -37,8 +37,9 @@ def run_application():
             print("Exiting...")
             break
         elif key == ord('a'):
-            model = get_model()
             (old_drawing, new_drawing, combined_drawing) = get_gemini_drawing(canvas.copy(), prompt, model, condition)
+            prompt = SUBSEQUENT_PROMPT
+            condition = None
             if combined_drawing is not None:
                 canvas[:] = combined_drawing
         elif key == ord('c'):
@@ -48,7 +49,7 @@ def run_application():
             new_drawing[:] = 255
         elif key == ord('s'):
             print("Saving new strokes to 'robot_path.svg'")
-            image_to_svg(new_drawing, filename="robot_path.svg")
+            image_to_svg.image_to_svg(new_drawing, filename="robot_path.svg")
             
     cv2.destroyAllWindows()
 

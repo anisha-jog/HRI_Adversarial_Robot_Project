@@ -1,0 +1,5 @@
+- **config.py**: Gemini env config parameters. Add your own API key.
+- **co_painter.py**: Drawing game, gemini model resets per turn.
+- **co_painter_memory.py**: Drawing game,  gemini model "remembers" every turn.
+- **robot_co_painter.py**: "end-to-end" integration + "trajectory planning" with co_painter.
+- **brute_force_prompting/...**: Generates all possible prompt options for given image. 
