@@ -36,7 +36,7 @@ from pathlib import Path
 import numpy as np
 from itertools import combinations
 from collections import defaultdict
-from typing import List
+from typing import List, Tuple
 import random
 
 from questionnaire_list import questionnaire_lst
@@ -117,6 +117,166 @@ def create_template(csv_path):
 
     return df_template
 
+def make_balanced_pairs(
+    designs: List[str],
+    min_degree: int = 8,
+    random_state: int = 0,
+) -> List[Tuple[str, str]]:
+    """
+    Given a list of design identifiers (e.g., image paths),
+    generate a set of unordered pairs (A,B) such that
+    each design appears in at least `min_degree` pairs,
+    as much as possible.
+
+    Returns a list of (design_A, design_B).
+    """
+    rng = random.Random(random_state)
+    n = len(designs)
+    if n < 2:
+        raise ValueError(f"Need at least 2 designs, got {n}")
+    if min_degree > n - 1:
+        raise ValueError(
+            f"min_degree={min_degree} impossible with n={n} "
+            f"(each design has at most n-1 neighbors)."
+        )
+
+    # Work with indices, then map back to designs at the end
+    degrees = [0] * n
+    pair_set = set()  # store pairs as (i, j) with i < j
+
+    # Greedy algorithm:
+    #   repeatedly go through all designs and, if its degree is too low,
+    #   connect it to a random other design it hasn't been paired with yet.
+    while True:
+        progress = False
+
+        for i in range(n):
+            if degrees[i] >= min_degree:
+                continue
+
+            # Find available partners j for i
+            candidates = []
+            for j in range(n):
+                if i == j:
+                    continue
+                a, b = (i, j) if i < j else (j, i)
+                if (a, b) not in pair_set:
+                    candidates.append((a, b))
+
+            if not candidates:
+                # No more unused partners for i
+                continue
+
+            # Choose one candidate pair at random
+            a, b = rng.choice(candidates)
+            pair_set.add((a, b))
+            degrees[a] += 1
+            degrees[b] += 1
+            progress = True
+
+        if not progress:
+            # No new pairs could be added in this pass.
+            # Either all designs reached min_degree, or we hit structural limits.
+            break
+
+        # Optional: stop early if everyone is at/above min_degree
+        if all(d >= min_degree for d in degrees):
+            break
+
+    # Map indices back to design IDs
+    pair_list = [(designs[i], designs[j]) for (i, j) in pair_set]
+
+    # You can print some diagnostics:
+    print(f"Generated {len(pair_list)} pairs for {n} designs.")
+    print("Degree stats: min =", min(degrees), "max =", max(degrees),
+          "avg =", sum(degrees) / n)
+
+    return pair_list
+
+def create_template_atomic(
+    csv_path: str,
+    use_all_pairs: bool = True,
+    min_degree: int = 8,
+    random_state: int = 0,
+) -> pd.DataFrame:
+    """
+    Treat each PNG file under DATASET_DIR as an atomic design.
+
+    If use_all_pairs=True:
+        - Use all unordered pairs of designs (full factorial).
+
+    If use_all_pairs=False:
+        - Use a sparse set of pairs chosen by make_balanced_pairs() so that
+          each design appears in at least `min_degree` pairs (as much as possible).
+
+    Then for each question in `questionnaire_lst`, replicate the pairs.
+
+    The resulting DataFrame has columns: A, B, question.
+
+    If csv_path exists, merge and deduplicate by unordered (A,B,question).
+    """
+    # 1. Collect all PNG designs as relative paths from DATASET_DIR
+    designs = []
+    for subdir, _, files in os.walk(DATASET_DIR):
+        for file in files:
+            if file.endswith(".png"):
+                rel_dir = os.path.relpath(subdir, DATASET_DIR)
+                if rel_dir == ".":
+                    rel_path = file
+                else:
+                    rel_path = os.path.join(rel_dir, file)
+                designs.append(rel_path)
+
+    designs = sorted(set(designs))
+    if len(designs) < 2:
+        raise ValueError(f"Need at least 2 designs, found {len(designs)}")
+
+    # 2. Build pair list: full or sparse
+    if use_all_pairs:
+        # Full factorial over designs
+        pair_list = list(combinations(designs, 2))  # all unordered pairs
+        print(f"Using ALL pairs: {len(pair_list)} pairs for {len(designs)} designs.")
+    else:
+        # Sparse, coverage-guaranteed pairs
+        pair_list = make_balanced_pairs(
+            designs, min_degree=min_degree, random_state=random_state
+        )
+        print(f"Using SPARSE pairs: {len(pair_list)} pairs for {len(designs)} designs.")
+
+    # 3. Expand by questions
+    rows = []
+    for q in questionnaire_lst:
+        for a, b in pair_list:
+            rows.append({"A": a, "B": b, "question": q})
+
+    df_new = pd.DataFrame(rows, columns=["A", "B", "question"])
+
+    # 4. Merge with existing CSV if it exists, dedup unordered pairs per question
+    if os.path.exists(csv_path):
+        df_old = pd.read_csv(csv_path)
+
+        # Ensure needed columns exist
+        for col in ["A", "B", "question"]:
+            if col not in df_old.columns:
+                df_old[col] = np.nan
+
+        df_all = pd.concat([df_old, df_new], ignore_index=True)
+
+        # Normalize (A,B) so unordered pairs are treated the same
+        AB_sorted = np.sort(df_all[["A", "B"]].values, axis=1)
+        df_all["A_norm"] = AB_sorted[:, 0]
+        df_all["B_norm"] = AB_sorted[:, 1]
+
+        df_template = (
+            df_all
+            .drop_duplicates(subset=["A_norm", "B_norm", "question"], keep="first")
+            .drop(columns=["A_norm", "B_norm"])
+        )
+    else:
+        df_template = df_new
+
+    return df_template
+
 def open_saved_file(csv_path: str, pname: str) -> pd.DataFrame:
     os.makedirs(os.path.dirname(csv_path), exist_ok=True)
 
@@ -125,7 +285,7 @@ def open_saved_file(csv_path: str, pname: str) -> pd.DataFrame:
     #     df = pd.read_csv(csv_path)
     # else:
         # copy base, append required columns
-    df = create_template(csv_path)
+    df = create_template_atomic(csv_path, use_all_pairs=False)
     for c in REQUIRED_COLUMNS:
         if c not in df.columns:
             df[c] = pd.NA
@@ -314,4 +474,4 @@ def index():
 # Expose ASGI app for uvicorn / gunicorn
 app = app
 if __name__ in {'__main__', '__mp_main__'}:
-    ui.run(host='0.0.0.0', port=8080, title='HRI Creative Co-Painting', reload=False, show=False)
+    ui.run(host='0.0.0.0', port=16867, title='HRI Creative Co-Painting', reload=False, show=False)
