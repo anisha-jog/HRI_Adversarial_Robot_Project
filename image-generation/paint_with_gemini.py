@@ -62,7 +62,7 @@ def draw_callback(event, x, y, flags, param):
     elif event == cv2.EVENT_MOUSEMOVE:
         if drawing:
             # Draw a black line from the last point to the current point
-            cv2.line(canvas, last_point, (x, y), (0, 0, 0), 2)
+            cv2.line(canvas, last_point, (x, y), (0, 0, 0), 1.5)
             last_point = (x, y)
     elif event == cv2.EVENT_LBUTTONUP:
         drawing = False
@@ -98,7 +98,6 @@ def get_gemini_drawing(image_data, prompt, model, condition = CONDITIONS["custom
         NEW_PROMPT = NEW_PROMPT + f"""
             (1) {condition['visual']}
             (2) {condition['semantic']}
-            (3) {condition['compositional']}
             """
 
     prompt = NEW_PROMPT.format(canvas_size=CANVAS_SIZE)
