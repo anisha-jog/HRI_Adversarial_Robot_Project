@@ -38,7 +38,7 @@ def run_application():
             break
         elif key == ord('a'):
             model = get_model()
-            (old_drawing, new_drawing, combined_drawing) = get_gemini_drawing(canvas.copy(), prompt, model, condition)
+            (old_drawing, new_drawing, combined_drawing, text) = get_gemini_drawing(canvas.copy(), prompt, model, condition)
             if combined_drawing is not None:
                 canvas[:] = combined_drawing
         elif key == ord('c'):

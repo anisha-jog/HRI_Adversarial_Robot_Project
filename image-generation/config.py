@@ -1,5 +1,5 @@
 # Gemini API Configuration
-API_KEY = "AIzaSyCOA762wyugeTvRWh9cZ3Jek9LbGxn6SyQ"
+API_KEY = "[YOUR KEY]"
 
 # Canvas configuration
 RESOLUTION = 40
@@ -8,15 +8,17 @@ CANVAS_SIZE = (int(PAGE_SIZE[1] * RESOLUTION), int(PAGE_SIZE[0] * RESOLUTION), 3
 
 # Axes of "Adversarial" Change
 VISUAL = {
-    "similar": "Very similar in shape, geometry, or style",
-    "neutral": "Slightly different in shape, geometry, or style",
-    "different": "Very different in shape, geometry, or style"
+    "similar": "Very similar in shape, geometry, composition, and/or style",
+    "neutral": "Slightly different in shape, geometry, composition, and/or style",
+    "different": "Very different in shape, geometry, composition, and/or style"
 }
 SEMANTIC = {
     "similar": "Very similar in concept or meaning",
     "neutral": "Slightly different in concept or meaning",
     "different": "Very different in concept or meaning"
 }
+
+# Should not be used:
 COMPOSITIONAL = {
     "similar": "Very similar in composition, balance or layout",
     "neutral": "Slightly different in composition, balance or layout",
@@ -27,22 +29,22 @@ COMPOSITIONAL = {
 COLLABORATIVE = {
     "visual": VISUAL["similar"],
     "semantic": SEMANTIC["similar"],
-    "compositional": COMPOSITIONAL["similar"]
+    #"compositional": COMPOSITIONAL["similar"]
 }
 ADVERSARIAL = {
     "visual": VISUAL["neutral"],
     "semantic": SEMANTIC["different"],
-    "compositional": COMPOSITIONAL["similar"]
+    #"compositional": COMPOSITIONAL["similar"]
 }
 ANTAGONISTIC = {
     "visual": VISUAL["different"],
     "semantic": SEMANTIC["different"],
-    "compositional": COMPOSITIONAL["different"]
+    #"compositional": COMPOSITIONAL["different"]
 }
 CUSTOM = {
-    "visual": VISUAL["similar"],
+    "visual": VISUAL["different"],
     "semantic": SEMANTIC["similar"],
-    "compositional": COMPOSITIONAL["similar"]
+    #"compositional": COMPOSITIONAL["different"]
 }
 CONDITIONS = {
     "collaborative": COLLABORATIVE,
@@ -88,10 +90,9 @@ As before, follow these guidelines:
 You are a creative painting agent collaborating with a user.
 Given this partial drawing from the user, infer the general context
 that the user is trying to draw, your role is not to imitate, but to continue the human drawing in a constructive, surprising, and meaningful way.
-You can construct a new image based on the current drawing using three axes of change:
-(1) Visually (unrelated shape, color, texture),
-(2) Semantically (unrelated concept or meaning),
-(3) Compositionally (unrelated balance or layout).
+You can construct a new image based on the current drawing using two axes of change:
+(1) Visually (shape, color, texture, composition),
+(2) Semantically (concept or meaning)
 Always explain your reasoning before generating the next stroke suggestion.
 
 You must keep this format for the new drawing:
