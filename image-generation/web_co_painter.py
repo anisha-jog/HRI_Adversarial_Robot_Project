@@ -1,7 +1,10 @@
 # web_co_painter.py
 #
-#   pip install fastapi uvicorn opencv-python numpy
-#   uvicorn web_co_painter:app --reload --port 16868
+# pip install fastapi uvicorn opencv-python numpy
+# python -m uvicorn web_co_painter:app \
+#   --reload \
+#   --host 0.0.0.0 \
+#   --port 16868
 #
 # Then open: http://localhost:16868
 
@@ -14,7 +17,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel
 
 from config import CANVAS_SIZE, GEMINI_PROMPT, SUBSEQUENT_PROMPT, CONDITIONS
-from image_to_svg import image_to_svg
+# from image_to_svg import image_to_svg
 from paint_with_gemini import (
     get_gemini_drawing,
     init_gemini_api,
@@ -117,6 +120,29 @@ HTML_TEMPLATE = """
       display: block;
       cursor: crosshair;
     }
+    #login-ui {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      margin-top: 40px;
+    }
+    #participant-name {
+      padding: 6px 10px;
+      border-radius: 6px;
+      border: 1px solid #444;
+      background: #222;
+      color: #eee;
+    }
+    #start-session {
+      padding: 8px 16px;
+      border-radius: 6px;
+      border: none;
+      cursor: pointer;
+      background: #2b7cff;
+      color: white;
+      font-weight: 500;
+    }
     #controls {
       display: flex;
       gap: 8px;
@@ -174,35 +200,46 @@ HTML_TEMPLATE = """
   </style>
 </head>
 <body>
-  <h1>HRI Robot Co-Painter</h1>
-  <div id="canvas-wrapper">
-    <canvas id="drawingCanvas" width="{{WIDTH}}" height="{{HEIGHT}}"></canvas>
+
+  <div id="login-ui">
+    <h1>HRI Robot Co-Painter</h1>
+    <p>Please enter your participant name to begin.</p>
+    <input id="participant-name" type="text" placeholder="Participant name" />
+    <button id="start-session">Start</button>
   </div>
 
-  <div id="controls">
-    <button id="ask-ai">Ask AI to Add</button>
-    <button id="clear" class="secondary">Clear</button>
-    <!--<button id="save-svg" class="secondary">Save SVG on Server</button>-->
+  <div id="main-ui" style="display:none;">
+    <h1>HRI Robot Co-Painter</h1>
+    <div id="canvas-wrapper">
+      <canvas id="drawingCanvas" width="{{WIDTH}}" height="{{HEIGHT}}"></canvas>
+    </div>
 
-    <label for="mode-select" style="margin-left:8px;">Mode:</label>
-    <select id="mode-select">
-      <option value="collaborative">Collaborative</option>
-      <option value="adversarial" selected>Adversarial</option>
-    </select>
-  </div>
+    <div id="controls">
+      <button id="ask-ai">Ask AI to Add</button>
+      <button id="clear" class="secondary">Clear</button>
+      <!--<button id="save-svg" class="secondary">Save SVG on Server</button>-->
 
-  <div id="api-key-controls" style="margin-top:12px;">
-    <label for="api-key-input" style="margin-left:12px;">API key:</label>
-    <input id="api-key-input" type="password" placeholder="Enter Gemini API key" size="28" />
-    <button id="set-api-key" class="secondary">Set</button>
-  </div>
+      <label for="mode-select" style="margin-left:8px;">Mode:</label>
+      <select id="mode-select">
+        <option value="collaborative">Collaborative</option>
+        <option value="adversarial" selected>Adversarial</option>
+        <option value="antagonistic">Antagonistic</option>
+      </select>
+    </div>
+
+    <div id="api-key-controls" style="margin-top:12px;">
+      <label for="api-key-input" style="margin-left:12px;">API key:</label>
+      <input id="api-key-input" type="password" placeholder="Enter Gemini API key" size="28" />
+      <button id="set-api-key" class="secondary">Set</button>
+    </div>
 
 
-  <div id="status"></div>
+    <div id="status"></div>
 
-  <div id="gemini-output-wrapper">
-    <div id="gemini-output-label">Gemini explanation / thoughts:</div>
-    <div id="gemini-output">(no output yet)</div>
+    <div id="gemini-output-wrapper">
+      <div id="gemini-output-label">Gemini explanation / thoughts:</div>
+      <div id="gemini-output">(no output yet)</div>
+    </div>
   </div>
 
 <script>
@@ -282,6 +319,38 @@ HTML_TEMPLATE = """
 
   const apiKeyInput = document.getElementById('api-key-input');
   const setApiKeyBtn = document.getElementById('set-api-key');
+
+  if (modeSelect) {
+    modeSelect.addEventListener('change', async () => {
+      const mode = modeSelect.value;  // "collaborative" / "adversarial" / "antagonistic"
+      console.log('Mode changed in UI to:', mode);  // debug
+
+      try {
+        setBusy(true, `Switching mode to "${mode}" ...`);
+        const res = await fetch('/api/set_mode', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mode }),
+        });
+
+        if (!res.ok) {
+          const errJson = await res.json().catch(() => ({}));
+          console.error('Error response from /api/set_mode:', errJson);
+          throw new Error(errJson.error || 'Server error');
+        }
+
+        const json = await res.json();
+        console.log('Server replied from /api/set_mode:', json);
+        setBusy(false, json.message || `Mode set to ${mode}.`);
+      } catch (err) {
+        console.error('Exception when calling /api/set_mode:', err);
+        setBusy(false, 'Error switching mode. See console.');
+      }
+    });
+  } else {
+    console.error('modeSelect is null – check id="mode-select" in HTML');
+  }
+
 
   function setBusy(isBusy, message) {
     askAiBtn.disabled = isBusy;
@@ -386,7 +455,7 @@ HTML_TEMPLATE = """
   });
 
   modeSelect.addEventListener('change', async () => {
-    const mode = modeSelect.value;  // "collaborative" or "adversarial"
+    const mode = modeSelect.value;  // "collaborative", "adversarial", or "antagonistic"
     try {
       setBusy(true, `Switching mode to "${mode}" ...`);
       const res = await fetch('/api/set_mode', {
@@ -395,7 +464,8 @@ HTML_TEMPLATE = """
         body: JSON.stringify({ mode }),
       });
       if (!res.ok) {
-        throw new Error('Server error');
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.error || 'Server error');
       }
       const json = await res.json();
       setBusy(false, json.message || `Mode set to ${mode}.`);
@@ -472,8 +542,9 @@ async def api_ai_draw(payload: ImagePayload):
 
         os.makedirs("saved_images", exist_ok=True)
         app.state.turn_idx += 1
-        postfix = datetime.now().strftime("%Y%m%d_%H%M%S")
-        save_path = os.path.join("saved_images", f"turn_{app.state.turn_idx:04d}_{postfix}.png")
+        prefix = datetime.now().strftime("%Y%m%d_%H%M%S")
+        mode = app.state.mode
+        save_path = os.path.join("saved_images", f"{prefix}_{mode}_turn_{app.state.turn_idx:04d}.png")
         cv2.imwrite(save_path, combined_drawing)
         print(f"Saved AI turn image to {save_path}")
 
@@ -553,7 +624,8 @@ async def api_save_svg(payload: ImagePayload):
 async def api_set_mode(payload: ModePayload):
     """Switch between 'collaborative' and 'adversarial' modes."""
     mode = payload.mode.lower()
-    if mode not in ("collaborative", "adversarial"):
+    print(mode)
+    if mode not in ("collaborative", "adversarial", "antagonistic"):
         return JSONResponse(
             {"error": f"Unknown mode '{payload.mode}'"},
             status_code=400,
