@@ -145,7 +145,7 @@ def get_gemini_drawing(image_data, prompt, model, condition = CONDITIONS["custom
 
                     old, new = separate_colors(cv_output_img)
                     robot_turn[:] = np.array(new)
-                    cv_output_img = (previous_canvas, robot_turn, combine_images(previous_canvas, robot_turn))
+                    cv_output_img = (previous_canvas, robot_turn, combine_images(previous_canvas, robot_turn), final_text)
                     print("Got new drawing from Gemini!")
                     return cv_output_img
         print("------------------------------------------------")

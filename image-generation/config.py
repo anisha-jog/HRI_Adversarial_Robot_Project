@@ -31,8 +31,8 @@ COLLABORATIVE = {
 }
 ADVERSARIAL = {
     "visual": VISUAL["neutral"],
-    "semantic": SEMANTIC["neutral"],
-    "compositional": COMPOSITIONAL["neutral"]
+    "semantic": SEMANTIC["different"],
+    "compositional": COMPOSITIONAL["similar"]
 }
 ANTAGONISTIC = {
     "visual": VISUAL["different"],
@@ -80,7 +80,8 @@ As before, follow these guidelines:
 3. The thickness of new strokes should uniform, which is same as the thickness of the user's strokes.
 4. Do not use blocks of color, only use lines.
 5. The return canvas resolution should be {canvas_size}.
-6. The new drawing should be feasible to draw with only lines and it is simple enough so that we can be drawn within 5 strokes."""
+6. The new drawing should be feasible to draw with only lines and it is simple enough so that we can be drawn within 5 strokes.
+7. Always explain your reasoning about your new strokes."""
 
 ### Original prompt: 
 """

@@ -129,7 +129,7 @@ def run_application():
                 captured_drawing = cv2.cvtColor(captured_drawing, cv2.COLOR_GRAY2BGR)
                 canvas[:] = captured_drawing
                 model = get_model()
-                (old_drawing, new_drawing, combined_drawing) = get_gemini_drawing(canvas, prompt, model, condition)
+                (old_drawing, new_drawing, combined_drawing, text) = get_gemini_drawing(canvas, prompt, model, condition)
                 
                 # Generate trajectory from new drawing 
                 lines = im.image_to_lines(new_drawing, segments=10)
