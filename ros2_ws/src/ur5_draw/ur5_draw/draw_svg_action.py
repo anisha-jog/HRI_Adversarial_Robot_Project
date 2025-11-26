@@ -106,8 +106,10 @@ class DrawSVG(Node):
             img_pose.position.z = PEN_HEIGHT
 
             img_pose.orientation.w = 0.707
-            img_pose.orientation.x = -0.707
-            img_pose.orientation.y = 0.0
+            img_pose.orientation.x = 0.0
+            # img_pose.orientation.x = -0.707
+            img_pose.orientation.y = 0.707
+            # img_pose.orientation.y = 0.0
             img_pose.orientation.z = 0.0
 
             tool_pose = deepcopy(img_pose)
@@ -128,7 +130,7 @@ class DrawSVG(Node):
 
 def main(args=None):
     rclpy.init(args=args)
-    test_img = cv2.imread('/ros2_ws/test.jpg')
+    test_img = cv2.imread('/home/studioadmin/HRI_Adversarial_Robot_Project/ros2_ws/test.jpg')
     height, width, channels = test_img.shape
     strokes = image_to_lines(test_img)
 
