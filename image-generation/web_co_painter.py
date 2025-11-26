@@ -36,11 +36,13 @@ async def startup_event():
     init_gemini_api(API_KEY)
     app.state.model = get_model()
     app.state.prompt = GEMINI_PROMPT
-    app.state.mode = "adversarial"          # default mode
-    app.state.condition = CONDITIONS["adversarial"]
+    app.state.mode = "custom_visual-similar_semantic-similar"
+    app.state.condition = CONDITIONS[app.state.mode]
     app.state.turn_idx = 0                  # if you added turn saving
     app.state.api_key = API_KEY             # track current key
-    print("Gemini model initialized (mode=adversarial)")
+    app.state.save_folder = "saved_images"
+    app.state.participant_name = None
+    print(f"Gemini model initialized (mode={app.state.mode})")
 
 
 
@@ -48,6 +50,7 @@ async def startup_event():
 
 class ImagePayload(BaseModel):
     image: str  # data URL: "data:image/png;base64,...."
+    participant: str | None
 
 
 class ModePayload(BaseModel):
@@ -56,6 +59,9 @@ class ModePayload(BaseModel):
 
 class ApiKeyPayload(BaseModel):
     api_key: str
+
+class ParticipantPayload(BaseModel):
+    participant: str
 
 # --- Helpers ----------------------------------------------------------------
 
@@ -220,10 +226,21 @@ HTML_TEMPLATE = """
       <!--<button id="save-svg" class="secondary">Save SVG on Server</button>-->
 
       <label for="mode-select" style="margin-left:8px;">Mode:</label>
-      <select id="mode-select">
+      <!--<select id="mode-select">
         <option value="collaborative">Collaborative</option>
         <option value="adversarial" selected>Adversarial</option>
         <option value="antagonistic">Antagonistic</option>
+      </select>-->
+      <select id="mode-select">
+        <option value="custom_visual-similar_semantic-similar" selected>Mode1</option>
+        <option value="custom_visual-similar_semantic-neutral">Mode2</option>
+        <option value="custom_visual-similar_semantic-different">Mode3</option>
+        <option value="custom_visual-neutral_semantic-similar">Mode4</option>
+        <option value="custom_visual-neutral_semantic-neutral">Mode5</option>
+        <option value="custom_visual-neutral_semantic-different">Mode6</option>
+        <option value="custom_visual-different_semantic-similar">Mode7</option>
+        <option value="custom_visual-different_semantic-neutral">Mode8</option>
+        <option value="custom_visual-different_semantic-different">Mode9</option>
       </select>
     </div>
 
@@ -251,7 +268,7 @@ HTML_TEMPLATE = """
     ctx.fillStyle = 'white';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.strokeStyle = 'black';
-    ctx.lineWidth = 1;
+    ctx.lineWidth = 1.5;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
   }
@@ -316,6 +333,13 @@ HTML_TEMPLATE = """
   const modeSelect = document.getElementById('mode-select');
   const statusEl = document.getElementById('status');
   const geminiOutputEl = document.getElementById('gemini-output');
+  const loginUi = document.getElementById('login-ui');
+  const mainUi = document.getElementById('main-ui');
+  const participantNameInput = document.getElementById('participant-name');
+  const startSessionBtn = document.getElementById('start-session');
+
+  let participantName = null;
+
 
   const apiKeyInput = document.getElementById('api-key-input');
   const setApiKeyBtn = document.getElementById('set-api-key');
@@ -395,15 +419,85 @@ HTML_TEMPLATE = """
     }
   });
 
+  startSessionBtn.addEventListener('click', async () => {
+    const name = participantNameInput.value.trim();
+    if (!name) {
+      alert('Please enter your participant name.');
+      return;
+    }
+
+    participantName = name;
+    console.log('Participant name:', participantName);
+
+    // Hide login screen, show main UI
+    loginUi.style.display = 'none';
+    mainUi.style.display = 'block';  // or 'flex' if you use flexbox
+
+    try {
+      setBusy(true, 'Starting session...');
+      const res = await fetch('/api/start_session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ participant: participantName }),
+      });
+
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        console.error('Error response from /api/start_session:', errJson);
+        alert(errJson.error || 'Failed to start session.');
+        setBusy(false);
+        return;
+      }
+
+      const json = await res.json();
+
+      if (json.study_done) {
+        // This participant finished all modes already
+        alert('This study is already finished for you. Thank you!');
+        // Stay on / return to login page, reset fields
+        participantName = null;
+        participantNameInput.value = '';
+        loginUi.style.display = 'block';
+        mainUi.style.display = 'none';
+        setBusy(false);
+        return;
+      }
+
+      const initialMode = json.mode || 'adversarial';
+
+      // Show main UI, set dropdown to chosen mode, clear canvas
+      loginUi.style.display = 'none';
+      mainUi.style.display = 'block';
+
+      if (modeSelect) {
+        modeSelect.value = initialMode;
+      }
+
+      resetCanvas();
+      setBusy(false, `Drawing session started`);
+      if (clearBtn) {
+        clearBtn.click();
+      }
+    } catch (err) {
+      console.error('Exception in startSession:', err);
+      setBusy(false);
+      alert('Error starting session. See console.');
+    }
+  });
 
   askAiBtn.addEventListener('click', async () => {
     try {
       setBusy(true, 'Asking Gemini to add to your drawing...');
       const dataUrl = canvas.toDataURL('image/png');
+
+      const payload = {
+        image: dataUrl,
+        participant: participantName,
+      };
       const res = await fetch('/api/ai_draw', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image: dataUrl }),
+        body: JSON.stringify(payload),
       });
       if (!res.ok) {
         throw new Error('Server error');
@@ -413,8 +507,54 @@ HTML_TEMPLATE = """
       newImg.onload = () => {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.drawImage(newImg, 0, 0, canvas.width, canvas.height);
-        setBusy(false, 'AI updated the drawing.');
+
+        // Show Gemini text if you have it
+        if (json.text && json.text.trim().length > 0) {
+          geminiOutputEl.textContent = json.text;
+        } else {
+          geminiOutputEl.textContent = '(no text output from Gemini)';
+        }
+
+        if (json.session_ended) {
+          // Notify user
+          const nextMode = json.next_mode;
+
+          if (json.study_done) {
+            // Finished the last mode -> whole study done
+            alert('Study is finished. Thank you for participating!');
+
+            // Return to login screen
+            if (clearBtn) clearBtn.click();  // reuse your clear logic
+            mainUi.style.display = 'none';
+            loginUi.style.display = 'block';
+
+            // Reset participant & UI state
+            participantName = null;
+            if (participantNameInput) participantNameInput.value = '';
+            if (modeSelect) modeSelect.value = 'adversarial';  // default
+            setBusy(false, 'Study finished.');
+          } else{
+            alert(`Drawing session ended. Switching to next session.`);
+
+            // Clear canvas for the new session
+            resetCanvas();
+
+            // Update dropdown to the next mode (so UI matches backend state)
+            if (modeSelect && nextMode) {
+              modeSelect.value = nextMode;
+            }
+
+            setBusy(false, `New drawing session started.`);
+            if (clearBtn) {
+              clearBtn.click();
+            }
+          }
+
+        } else {
+          setBusy(false, 'AI updated the drawing.');
+        }
       };
+
       newImg.src = json.image;
 
       // Show Gemini's text output (if any)
@@ -432,26 +572,6 @@ HTML_TEMPLATE = """
   clearBtn.addEventListener('click', () => {
     resetCanvas();
     statusEl.textContent = 'Canvas cleared.';
-  });
-
-  saveSvgBtn.addEventListener('click', async () => {
-    try {
-      setBusy(true, 'Saving SVG on server as robot_path.svg ...');
-      const dataUrl = canvas.toDataURL('image/png');
-      const res = await fetch('/api/save_svg', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image: dataUrl }),
-      });
-      if (!res.ok) {
-        throw new Error('Server error');
-      }
-      const json = await res.json();
-      setBusy(false, json.message || 'Saved robot_path.svg on server.');
-    } catch (err) {
-      console.error(err);
-      setBusy(false, 'Error saving SVG. See console.');
-    }
   });
 
   modeSelect.addEventListener('change', async () => {
@@ -497,12 +617,60 @@ async def index():
     )
     return HTMLResponse(content=html)
 
+@app.post("/api/start_session")
+async def api_start_session(payload: ParticipantPayload):
+    """Start a session for a participant and choose mode based on folders."""
+    participant = payload.participant.strip()
+    if not participant:
+        return JSONResponse({"error": "Participant name is empty."}, status_code=400)
+
+    base_dir = f"saved_images/{participant}"
+    os.makedirs(base_dir, exist_ok=True)
+
+    # choose mode based on existing folders
+    chosen_mode = None
+    mode_seq = list(CONDITIONS.keys())
+    for mode in mode_seq:
+        folder = os.path.join(base_dir, mode)  # saved_images/<participant>/<mode>
+        howmany = 0
+        if os.path.exists(folder):
+            howmany = len([f for f in os.listdir(folder) if f.endswith(".png")]) if os.path.exists(folder) else 0
+
+        if (not os.path.exists(folder)) or howmany != 6:
+            chosen_mode = mode
+            break
+
+    if chosen_mode is None:
+        # All modes already have folders: study is done for this participant
+        print(f"Participant '{participant}' has completed all modes. Study done.")
+        # Reset state to a neutral default
+        app.state.participant_name = None
+        app.state.mode = mode_seq[0]
+        app.state.condition = CONDITIONS.get(app.state.mode, None)
+        app.state.prompt = GEMINI_PROMPT
+        app.state.turn_idx = 0
+
+        return JSONResponse({"mode": None, "study_done": True})
+
+    # set backend state
+    app.state.participant_name = participant
+    app.state.mode = chosen_mode
+    app.state.condition = CONDITIONS.get(chosen_mode, None)
+    app.state.prompt = GEMINI_PROMPT  # new session always starts from GEMINI_PROMPT
+    app.state.turn_idx = 0
+
+    print(f"Participant '{participant}' starting new session in mode '{chosen_mode}'")
+
+    return JSONResponse({"mode": chosen_mode})
+
 
 @app.post("/api/ai_draw")
 async def api_ai_draw(payload: ImagePayload):
     """Take current canvas image, call Gemini co-painter, return updated canvas + text."""
     try:
         img = data_url_to_cv2_image(payload.image)
+
+        # old_drawing, new_drawing, combined_drawing, text_output = img.copy(), img.copy(), img.copy(), "hello" # for debugging
 
         # Support both 3-return and 4-return versions of get_gemini_drawing.
         try:
@@ -540,16 +708,71 @@ async def api_ai_draw(payload: ImagePayload):
             interpolation=cv2.INTER_NEAREST,
         )
 
-        os.makedirs("saved_images", exist_ok=True)
-        app.state.turn_idx += 1
-        prefix = datetime.now().strftime("%Y%m%d_%H%M%S")
+        pname = payload.participant or "unknown"
         mode = app.state.mode
-        save_path = os.path.join("saved_images", f"{prefix}_{mode}_turn_{app.state.turn_idx:04d}.png")
-        cv2.imwrite(save_path, combined_drawing)
-        print(f"Saved AI turn image to {save_path}")
+        foldername = f"{app.state.save_folder}/{pname}/{mode}"
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        os.makedirs(foldername, exist_ok=True)
+        save_path_user = f"{foldername}/turn_{app.state.turn_idx}_human.png"
+        cv2.imwrite(save_path_user, old_drawing)
+        save_path_robot = f"{foldername}/turn_{app.state.turn_idx}_robot.png"
+        cv2.imwrite(save_path_robot, combined_drawing)
+        print(f"Saved AI turn image to {save_path_robot}")
+
+        app.state.turn_idx += 1
+
+        session_ended = False
+        study_done = False
+        next_mode = app.state.mode
+
+        if app.state.turn_idx >= 3:
+            session_ended = True
+
+            mode_seq = list(CONDITIONS.keys())
+            try:
+                cur_idx = mode_seq.index(app.state.mode)
+            except ValueError:
+                cur_idx = 0
+
+            # If we are at the LAST mode and would wrap to first -> study done
+            if cur_idx == len(mode_seq) - 1:
+                study_done = True
+                next_mode = mode_seq[0]  # purely informational for frontend
+
+                # Reset backend state to neutral default for future participants
+                participant = getattr(app.state, "participant_name", "anonymous")
+                print(
+                    f"Study complete for '{participant}'. "
+                    "All modes finished; returning to login."
+                )
+                app.state.participant_name = None
+                app.state.mode = mode_seq[0]
+                app.state.condition = CONDITIONS.get(app.state.mode, None)
+                app.state.prompt = GEMINI_PROMPT
+                app.state.turn_idx = 0
+            else:
+                # Normal: advance to next mode and start a new session
+                next_mode = mode_seq[cur_idx + 1]
+                app.state.mode = next_mode
+                app.state.condition = CONDITIONS.get(next_mode, None)
+                app.state.prompt = GEMINI_PROMPT  # new session starts with initial prompt
+                app.state.turn_idx = 0
+
+                participant = getattr(app.state, "participant_name", "anonymous")
+                print(
+                    f"Session ended for '{participant}'. "
+                    f"Switching to mode='{next_mode}', resetting prompt & turn_idx."
+                )
+        # --------------------------------------------------------------------
 
         data_url = cv2_image_to_data_url(combined_drawing)
-        return JSONResponse({"image": data_url, "text": text_output})
+        return JSONResponse({
+            "image": data_url,
+            "text": text_output,
+            "session_ended": session_ended,
+            "next_mode": next_mode,
+            "study_done": study_done,
+        })
     except Exception as e:
         print("Error in /api/ai_draw:", e)
         return JSONResponse({"error": str(e)}, status_code=500)
@@ -625,7 +848,7 @@ async def api_set_mode(payload: ModePayload):
     """Switch between 'collaborative' and 'adversarial' modes."""
     mode = payload.mode.lower()
     print(mode)
-    if mode not in ("collaborative", "adversarial", "antagonistic"):
+    if mode not in CONDITIONS.keys():
         return JSONResponse(
             {"error": f"Unknown mode '{payload.mode}'"},
             status_code=400,

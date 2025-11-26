@@ -8,9 +8,9 @@ CANVAS_SIZE = (int(PAGE_SIZE[1] * RESOLUTION), int(PAGE_SIZE[0] * RESOLUTION), 3
 
 # Axes of "Adversarial" Change
 VISUAL = {
-    "similar": "Very similar in shape, geometry, composition, and/or style",
-    "neutral": "Slightly different in shape, geometry, composition, and/or style",
-    "different": "Very different in shape, geometry, composition, and/or style"
+    "similar": "Very similar in shape, geometry, composition, layout, and/or style",
+    "neutral": "Slightly different in shape, geometry, composition, layout, and/or style",
+    "different": "Very different in shape, geometry, composition, layout, and/or style"
 }
 SEMANTIC = {
     "similar": "Very similar in concept or meaning",
@@ -46,12 +46,25 @@ CUSTOM = {
     "semantic": SEMANTIC["similar"],
     #"compositional": COMPOSITIONAL["different"]
 }
-CONDITIONS = {
-    "collaborative": COLLABORATIVE,
-    "adversarial": ADVERSARIAL,
-    "antagonistic": ANTAGONISTIC,
-    "custom": CUSTOM
-}
+# CONDITIONS = {
+#     "collaborative": COLLABORATIVE,
+#     "adversarial": ADVERSARIAL,
+#     "antagonistic": ANTAGONISTIC,
+#     "custom": CUSTOM
+# }
+
+CONDITIONS = {}
+
+levels = ["similar", "neutral", "different"]
+
+# append on CONDITIONS
+for i, v in enumerate(levels):
+    for j, s in enumerate(levels):
+        key = f"custom_visual-{v}_semantic-{s}"
+        CONDITIONS[key] = {
+            "visual": VISUAL[v],
+            "semantic": SEMANTIC[s],
+        }
 
 # Main Gemini Prompt Template
 GEMINI_PROMPT ="""

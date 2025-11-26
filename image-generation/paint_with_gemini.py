@@ -91,7 +91,7 @@ def get_model():
     model = genai.GenerativeModel('gemini-2.5-flash-image')
     return model
 
-def get_gemini_drawing(image_data, prompt, model, condition = CONDITIONS["custom"]):
+def get_gemini_drawing(image_data, prompt, model, condition):
     """Sends the current canvas to Gemini and returns the modified image."""
     NEW_PROMPT = prompt
     if condition is not None:
