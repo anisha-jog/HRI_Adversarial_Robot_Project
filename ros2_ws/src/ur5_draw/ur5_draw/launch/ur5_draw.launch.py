@@ -150,8 +150,9 @@ def generate_launch_description():
         launch_arguments={
             'ur_type': ur_type,
             'robot_ip': robot_ip,
+            'reverse_ip': '192.168.56.101',
             'use_fake_hardware': 'false',
-            'headless_mode': 'true',
+            # 'headless_mode': 'true',
             'use_sim_time': 'false', # Important for real robot
             'initial_joint_controller': 'joint_trajectory_controller',
             'launch_rviz': 'false'
@@ -189,8 +190,8 @@ def generate_launch_description():
     static_img_frame_pub = Node(
                 package='tf2_ros',
                 executable='static_transform_publisher',
-                arguments=[
-                    '--x', x_offset, '--y', y_offset, '--z', '0',
+                arguments=[ # height of metal cart
+                    '--x', '0.3', '--y', '-0.45', '--z', '-0.1015',
                     '--yaw', '0', '--pitch', '0', '--roll',
                     '0', '--frame-id', 'base_link', '--child-frame-id', 'image_frame']
             )

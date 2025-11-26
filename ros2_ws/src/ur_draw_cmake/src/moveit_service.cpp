@@ -22,7 +22,7 @@ public:
         : Node("moveit_draw_stroke_server",
                rclcpp::NodeOptions().automatically_declare_parameters_from_overrides(true)),
           planning_group_("ur_manipulator"),
-          raised_pen_height_(0.01),
+          raised_pen_height_(0.015),
           distance_threshold_(0.5),
           eef_step_(0.001),
           cartesian_fraction_threshold_(0.65)
@@ -86,7 +86,7 @@ public:
         table_pose.orientation.w = 1.0;
         table_pose.position.x = 0.0;
         table_pose.position.y = 0.0;
-        table_pose.position.z = -0.05; // Top surface at Z=0
+        table_pose.position.z = -0.11; // Top surface at Z=0
 
         table.primitives.push_back(primitive);
         table.primitive_poses.push_back(table_pose);
