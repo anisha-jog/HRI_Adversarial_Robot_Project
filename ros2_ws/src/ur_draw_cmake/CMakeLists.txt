@@ -32,6 +32,8 @@ install(DIRECTORY launch
 
 rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/DrawStroke.srv"
+  "msg/Stroke.msg"
+  "action/DrawStrokes.action"
   DEPENDENCIES geometry_msgs # This service depends on geometry_msgs/Pose
 )
 

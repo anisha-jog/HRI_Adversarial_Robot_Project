@@ -29,6 +29,7 @@ setup(
     entry_points={
         'console_scripts': [
             'draw = ur5_draw.draw_svg_action:main',
+            'test = ur5_draw.test_action_client:main',
         ],
     },
 )
