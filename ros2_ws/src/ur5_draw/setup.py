@@ -28,7 +28,8 @@ setup(
     },
     entry_points={
         'console_scripts': [
-            'draw = ur5_draw.draw_svg_action:main',
+            'draw = ur5_draw.draw_node:main',
+            'action = ur5_draw.draw_action:main',
             'test = ur5_draw.test_action_client:main',
         ],
     },
