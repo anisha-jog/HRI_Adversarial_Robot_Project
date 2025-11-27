@@ -19,17 +19,9 @@ from ur5_draw.image_to_svg import image_to_lines
 from ur_draw_cmake.srv import DrawStroke
 
 IN_TO_M = 0.0254
-PEN_HEIGHT = .05
-HOME_POSE = Pose(position=Point(x=0.20, y=0.0, z=0.5),orientation=Quaternion(w=.707,x=-.707))
-TEST_STROKE = [
-    (0.1, 0.1),
-    (0.1, 0.2),
-    (0.2, 0.2),
-    (0.2, 0.1),
-    (0.1, 0.1),
-]
 
 class DrawSVG(Node):
+    PEN_HEIGHT = .05
     def __init__(self,img_width,img_length):
         super().__init__('draw_svg')
         self.tf_buffer = Buffer()
@@ -43,6 +35,7 @@ class DrawSVG(Node):
         self.image_to_world_t = self.get_img_transform('image_frame', 'world')
         self.get_logger().info('Transform successfully retrieved and cached.')
 
+        # rviz marker for image viz
         self.img_viz_pub = self.create_publisher(Marker, 'image_viz', 10)
         self.img_viz = Marker()
         self.img_viz.header.frame_id = 'world'
@@ -52,11 +45,25 @@ class DrawSVG(Node):
         self.img_viz.color.r = 1.0
         self.img_viz.points = []
 
+        # image settings
         self.img_width = img_width
         self.img_length = img_length
         scale_factor = .9
         self.page_length_m  =  11 * IN_TO_M * scale_factor
         self.page_width_m   = 8.5 * IN_TO_M * scale_factor
+
+        # home pose in image frame
+        self.home_pose = Pose(position=Point(y=-0.10, z=0.3),orientation=Quaternion(w=.707,y=.707))
+
+    def go_home(self):
+        home_world_pose = do_transform_pose(self.home_pose, self.image_to_world_t)
+        self.get_logger().info("Returning to home position")
+        future = self.send_traj_request([home_world_pose])
+        rclpy.spin_until_future_complete(self, future)
+        if future.result() is not None:
+            self.get_logger().info(f"Move completed {'' if future.result().success else 'un'}successfully. {future.result().message}")
+        else:
+            self.get_logger().error("Service call failed.")
 
     def get_img_transform(self, source_frame, target_frame):
         wait_duration_sec = 5.0
@@ -103,13 +110,11 @@ class DrawSVG(Node):
             img_pose = Pose()
             img_pose.position.x = x/self.img_length * self.page_length_m
             img_pose.position.y = y/self.img_width * self.page_width_m
-            img_pose.position.z = PEN_HEIGHT
+            img_pose.position.z = self.PEN_HEIGHT
 
             img_pose.orientation.w = 0.707
             img_pose.orientation.x = 0.0
-            # img_pose.orientation.x = -0.707
             img_pose.orientation.y = 0.707
-            # img_pose.orientation.y = 0.0
             img_pose.orientation.z = 0.0
 
             tool_pose = deepcopy(img_pose)
@@ -127,6 +132,13 @@ class DrawSVG(Node):
             self.get_logger().info(f"Move completed {'' if future.result().success else 'un'}successfully. {future.result().message}")
         else:
             self.get_logger().error("Service call failed.")
+    
+    def draw_strokes(self, strokes):
+        for i,stroke in enumerate(strokes):
+            self.get_logger().info(f"Starting stroke {i} of length {len(stroke)}")
+            self.draw_stroke_traj(stroke)
+        self.get_logger().info("All strokes drawn.")
+        self.go_home()
 
 def main(args=None):
     rclpy.init(args=args)
@@ -139,13 +151,7 @@ def main(args=None):
     draw_svg_node = DrawSVG(img_length=height,img_width=width)
 
     try:
-        # draw_svg_node.go_home()
-        # draw_svg_node.draw_stroke(TEST_STROKE)
-        # draw_svg_node.draw_stroke_traj(TEST_STROKE)
-        for i,stroke in enumerate(strokes):
-            draw_svg_node.get_logger().info(f"Starting stroke {i} of length {len(stroke)}")
-            draw_svg_node.draw_stroke_traj(stroke)
-        # rclpy.spin(draw_svg_node)
+        draw_svg_node.draw_strokes(strokes)
     except KeyboardInterrupt:
         pass
     finally:
