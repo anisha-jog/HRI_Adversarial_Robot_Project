@@ -210,6 +210,13 @@ def generate_launch_description():
         ],
     )
 
+    draw_action = Node(
+        package="ur5_draw",
+        executable="action",
+        name="draw_action_server",
+        output="screen",
+    )
+
     return LaunchDescription([
         enable_sim_arg,
         robot_ip_arg,
@@ -217,6 +224,7 @@ def generate_launch_description():
         static_table_frame_pub,
         static_img_frame_pub,
         moveit_service,
+        draw_action,
 
         # Launches the appropriate UR driver setup
         ur_driver_real,

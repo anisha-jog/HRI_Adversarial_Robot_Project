@@ -1,7 +1,7 @@
 # Goal: List of strokes to draw
 ur_draw_cmake/Stroke[] strokes
-float64 img_width    # Width of the source image in pixels
-float64 img_length   # Height/length of the source image in pixels
+int32 img_width    # Width of the source image in pixels
+int32 img_length   # Height/length of the source image in pixels
 
 ---
 # Result: Success status and message

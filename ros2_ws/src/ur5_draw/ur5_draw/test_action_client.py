@@ -44,8 +44,8 @@ class DrawSVGActionClient(Node):
         
         # Create goal message
         goal_msg = DrawStrokes.Goal()
-        goal_msg.img_width = float(width)
-        goal_msg.img_length = float(height)
+        goal_msg.img_width = int(width)
+        goal_msg.img_length = int(height)
         
         # Convert strokes to ROS messages
         for stroke_points in strokes:
@@ -109,11 +109,22 @@ class DrawSVGActionClient(Node):
 
 def main(args=None):
     rclpy.init(args=args)
+
+        # Get image path from command line argument
+    import sys
+    user_args = rclpy.utilities.remove_ros_args(sys.argv)
+    
+    # Get image path from command line argument
+    if len(user_args) < 2:
+        print("Usage: ros2 run your_package draw_svg_action_client.py <image_path>")
+        print("Example: ros2 run your_package draw_svg_action_client.py /path/to/image.jpg")
+        # Path to your test image
+        image_path = '/home/studioadmin/HRI_Adversarial_Robot_Project/ros2_ws/test.jpg'
+    else:
+        image_path = user_args[1]
     
     action_client = DrawSVGActionClient()
     
-    # Path to your test image
-    image_path = '/home/studioadmin/HRI_Adversarial_Robot_Project/ros2_ws/test.jpg'
     
     # Send goal
     future = action_client.send_goal(image_path)
