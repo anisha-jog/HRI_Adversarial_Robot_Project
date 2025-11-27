@@ -82,9 +82,9 @@ def blackize(image_data):
     img_rgb = cv2.cvtColor(img_bw, cv2.COLOR_GRAY2RGB)
     return img_rgb
 
-def init_gemini_api(API_KEY):
+def init_gemini_api(api_key):
     """Initializes the Gemini API with the provided API key."""
-    genai.configure(api_key=API_KEY)
+    genai.configure(api_key=api_key)
 
 def get_model():
     """Updates the Gemini model to ensure the latest version is used."""
@@ -101,6 +101,9 @@ def get_gemini_drawing(image_data, prompt, model, condition):
             """
 
     prompt = NEW_PROMPT.format(canvas_size=CANVAS_SIZE)
+
+    print(prompt)
+    print("=====================")
         
     # Convert OpenCV image (BGR) to PIL Image (RGB)
     # convert image into only black and white. not even gray
