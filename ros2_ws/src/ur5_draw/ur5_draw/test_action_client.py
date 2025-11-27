@@ -10,9 +10,9 @@ from ur_draw_cmake.msg import Stroke
 from ur5_draw.image_to_svg import image_to_lines
 
 
-class DrawSVGActionClient(Node):
+class DrawActionClient(Node):
     def __init__(self):
-        super().__init__('draw_svg_action_client')
+        super().__init__('draw_action_client')
         
         self._action_client = ActionClient(
             self,
@@ -116,14 +116,14 @@ def main(args=None):
     
     # Get image path from command line argument
     if len(user_args) < 2:
-        print("Usage: ros2 run your_package draw_svg_action_client.py <image_path>")
-        print("Example: ros2 run your_package draw_svg_action_client.py /path/to/image.jpg")
+        print("Usage: ros2 run your_package draw_action_client.py <image_path>")
+        print("Example: ros2 run your_package draw_action_client.py /path/to/image.jpg")
         # Path to your test image
         image_path = '/home/studioadmin/HRI_Adversarial_Robot_Project/ros2_ws/test.jpg'
     else:
         image_path = user_args[1]
     
-    action_client = DrawSVGActionClient()
+    action_client = DrawActionClient()
     
     
     # Send goal
