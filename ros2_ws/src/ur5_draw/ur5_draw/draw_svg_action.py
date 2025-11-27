@@ -54,9 +54,9 @@ class DrawSVG(Node):
 
         self.img_width = img_width
         self.img_length = img_length
-
-        self.page_length_m =  11 * IN_TO_M
-        self.page_width_m = 8.5 * IN_TO_M
+        scale_factor = .9
+        self.page_length_m  =  11 * IN_TO_M * scale_factor
+        self.page_width_m   = 8.5 * IN_TO_M * scale_factor
 
     def get_img_transform(self, source_frame, target_frame):
         wait_duration_sec = 5.0

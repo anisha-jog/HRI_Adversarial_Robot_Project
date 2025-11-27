@@ -13,8 +13,6 @@
 
 #include "ur_draw_cmake/srv/draw_stroke.hpp"
 
-const double ARM_BOUNDS = 0.7;
-
 class DrawStrokeServer : public rclcpp::Node
 {
 public:
@@ -22,9 +20,11 @@ public:
         : Node("moveit_draw_stroke_server",
                rclcpp::NodeOptions().automatically_declare_parameters_from_overrides(true)),
           planning_group_("ur_manipulator"),
-          raised_pen_height_(0.015),
-          distance_threshold_(0.5),
+          raised_pen_height_(0.02),
+          distance_threshold_(0.8),
           eef_step_(0.001),
+          arm_bounds_(0.4),
+          table_height_(-0.0025),
           cartesian_fraction_threshold_(0.65)
     {
         // Declare and get parameters
@@ -32,12 +32,16 @@ public:
         this->declare_parameter("raised_pen_height", raised_pen_height_);
         this->declare_parameter("distance_threshold", distance_threshold_);
         this->declare_parameter("eef_step", eef_step_);
+        this->declare_parameter("arm_bounds", arm_bounds_);
+        this->declare_parameter("table_height", table_height_);
         this->declare_parameter("cartesian_fraction_threshold", cartesian_fraction_threshold_);
-
+        
         this->get_parameter("planning_group", planning_group_);
         this->get_parameter("raised_pen_height", raised_pen_height_);
         this->get_parameter("distance_threshold", distance_threshold_);
         this->get_parameter("eef_step", eef_step_);
+        this->get_parameter("arm_bounds", arm_bounds_);
+        this->get_parameter("table_height", table_height_);
         this->get_parameter("cartesian_fraction_threshold", cartesian_fraction_threshold_);
 
         // Create service
@@ -68,7 +72,8 @@ public:
 
         // Create table collision object
         moveit_msgs::msg::CollisionObject table;
-        table.header.frame_id = "world";
+        // table.header.frame_id = "world";
+        table.header.frame_id = "table_frame";
         table.header.stamp = this->now();
         table.id = "table";
         table.operation = moveit_msgs::msg::CollisionObject::ADD;
@@ -78,7 +83,7 @@ public:
         primitive.type = primitive.BOX;
         primitive.dimensions.resize(3);
         primitive.dimensions[0] = 2.0;  // X length (2m)
-        primitive.dimensions[1] = 2.0;  // Y width (2m)
+        primitive.dimensions[1] = 2.0 * arm_bounds_;  // Y width (2m)
         primitive.dimensions[2] = 0.05; // Z height (5cm)
 
         // Position the table
@@ -86,7 +91,7 @@ public:
         table_pose.orientation.w = 1.0;
         table_pose.position.x = 0.0;
         table_pose.position.y = 0.0;
-        table_pose.position.z = -0.11; // Top surface at Z=0
+        table_pose.position.z = table_height_; // Top surface at Z=0
 
         table.primitives.push_back(primitive);
         table.primitive_poses.push_back(table_pose);
@@ -103,7 +108,7 @@ public:
         geometry_msgs::msg::Pose table_pose_wall_1;
         table_pose_wall_1.orientation.w = 1.0;
         table_pose_wall_1.position.x = 0.0;
-        table_pose_wall_1.position.y = -1*ARM_BOUNDS;
+        table_pose_wall_1.position.y = -1*arm_bounds_;
         table_pose_wall_1.position.z = 0.0;
 
         table.primitives.push_back(primitive_wall_1);
@@ -121,7 +126,7 @@ public:
         geometry_msgs::msg::Pose table_pose_wall_2;
         table_pose_wall_2.orientation.w = 1.0;
         table_pose_wall_2.position.x = 0.0;
-        table_pose_wall_2.position.y = ARM_BOUNDS;
+        table_pose_wall_2.position.y = arm_bounds_;
         table_pose_wall_2.position.z = 0.0;
 
         table.primitives.push_back(primitive_wall_2);
@@ -156,6 +161,8 @@ private:
     double raised_pen_height_;
     double distance_threshold_;
     double eef_step_;
+    double arm_bounds_;
+    double table_height_;
     double cartesian_fraction_threshold_;
     bool first_move_;
 
