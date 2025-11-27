@@ -43,7 +43,7 @@ from questionnaire_list import questionnaire_lst
 
 # ---- Config ----
 RESULT_DIR        = 'result/'
-DATASET_DIR       = 'data/output'
+DATASET_DIR       = 'data'
 REQUIRED_COLUMNS  = ["A", "B", "question", "preferred"]
 
 APP_DIR = Path(__file__).parent.resolve()
@@ -68,54 +68,6 @@ def save_to_csv(csv_path: str, df: pd.DataFrame) -> None:
     df = df.sort_values(by=columns, ascending=True, ignore_index=True)
     os.makedirs(os.path.dirname(csv_path), exist_ok=True)
     df.to_csv(csv_path, index=False)
-
-def create_template(csv_path):
-    groups = defaultdict(list)
-
-    # 1. Walk and group file paths by their last folder name
-    for subdir, _, files in os.walk(DATASET_DIR):
-        for file in files:
-            if file.endswith('.png'):
-                # full relative path from DATASET_DIR
-                rel_dir = os.path.relpath(subdir, DATASET_DIR)  # e.g. "smiley" or "scene1/smiley"
-                rel_path = os.path.join(rel_dir, file) if rel_dir != "." else file
-
-                # use the *last* folder as group key (e.g. "smiley", "mountain")
-                last_folder = os.path.basename(rel_dir) if rel_dir != "." else ""
-                groups[last_folder].append(rel_path)
-
-    # 2. Within each group (folder), make all combinations of 2
-    pair_list = []
-    for paths in groups.values():
-        if len(paths) < 2:
-            continue
-        pair_list.extend(combinations(paths, 2))  # no cross-folder pairs
-
-    # pairs = np.array(pair_list)
-    # df_template = pd.DataFrame(pairs, columns=["A", "B"])
-
-    rows = []
-    for q in questionnaire_lst:
-        for a, b in pair_list:
-            rows.append({"A": a, "B": b, "question": q})
-
-    df_new = pd.DataFrame(rows, columns=["A", "B", "question"])
-
-    if os.path.exists(csv_path):
-        df_old = pd.read_csv(csv_path)
-
-        # Ensure columns exist in old df
-        for col in ["A", "B", "question"]:
-            if col not in df_old.columns:
-                df_old[col] = np.nan
-
-        # Concatenate and drop duplicates by key (A,B,question)
-        df_template = pd.concat([df_old, df_new], ignore_index=True)
-        df_template = df_template.drop_duplicates(subset=["A", "B", "question"], keep="first")
-    else:
-        df_template = df_new
-
-    return df_template
 
 def make_balanced_pairs(
     designs: List[str],
@@ -193,7 +145,13 @@ def make_balanced_pairs(
 
     return pair_list
 
-def create_template_atomic(
+def parent_prefix(rel_path: str, depth: int) -> str:
+    parts = rel_path.split(os.sep)
+    dir_parts = parts[:-1]          # drop filename
+    key_parts = dir_parts[:depth]   # first N directories
+    return os.path.join(*key_parts) if key_parts else ""
+
+def create_template(
     csv_path: str,
     use_all_pairs: bool = True,
     min_degree: int = 8,
@@ -217,9 +175,9 @@ def create_template_atomic(
     """
     # 1. Collect all PNG designs as relative paths from DATASET_DIR
     designs = []
-    for subdir, _, files in os.walk(DATASET_DIR):
+    for subdir, dirs, files in os.walk(DATASET_DIR):
         for file in files:
-            if file.endswith(".png"):
+            if file.endswith(".png") and "turn_2_robot" in file:
                 rel_dir = os.path.relpath(subdir, DATASET_DIR)
                 if rel_dir == ".":
                     rel_path = file
@@ -231,17 +189,30 @@ def create_template_atomic(
     if len(designs) < 2:
         raise ValueError(f"Need at least 2 designs, found {len(designs)}")
 
-    # 2. Build pair list: full or sparse
-    if use_all_pairs:
-        # Full factorial over designs
-        pair_list = list(combinations(designs, 2))  # all unordered pairs
-        print(f"Using ALL pairs: {len(pair_list)} pairs for {len(designs)} designs.")
-    else:
-        # Sparse, coverage-guaranteed pairs
-        pair_list = make_balanced_pairs(
-            designs, min_degree=min_degree, random_state=random_state
-        )
-        print(f"Using SPARSE pairs: {len(pair_list)} pairs for {len(designs)} designs.")
+    groups = defaultdict(list)
+    for d in designs:
+        key = parent_prefix(d, 1)
+        groups[key].append(d)
+
+    pair_list = []
+    for key, group_designs in groups.items():
+        if len(group_designs) < 2:
+            continue  # nothing to pair inside this group
+        # all unordered pairs *within* this group
+        pair_list.extend(combinations(sorted(group_designs), 2))
+
+
+    # # 2. Build pair list: full or sparse
+    # if use_all_pairs:
+    #     # Full factorial over designs
+    #     pair_list = list(combinations(designs, 2))  # all unordered pairs
+    #     print(f"Using ALL pairs: {len(pair_list)} pairs for {len(designs)} designs.")
+    # else:
+    #     # Sparse, coverage-guaranteed pairs
+    #     pair_list = make_balanced_pairs(
+    #         designs, min_degree=min_degree, random_state=random_state
+    #     )
+    #     print(f"Using SPARSE pairs: {len(pair_list)} pairs for {len(designs)} designs.")
 
     # 3. Expand by questions
     rows = []
@@ -285,7 +256,7 @@ def open_saved_file(csv_path: str, pname: str) -> pd.DataFrame:
     #     df = pd.read_csv(csv_path)
     # else:
         # copy base, append required columns
-    df = create_template_atomic(csv_path, use_all_pairs=False)
+    df = create_template(csv_path, use_all_pairs=False)
     for c in REQUIRED_COLUMNS:
         if c not in df.columns:
             df[c] = pd.NA
@@ -443,7 +414,7 @@ def survey_page(pname: str):
             (img_a,img_b) = state.file_path_for_current()
             # prompt = state.prompt_for_current()
             with ui.card().classes('w-full p-4'):
-                ui.label("Choose one between two drawings regarding to the question.").style('font-weight:600; white-space:normal;').classes('break-words')
+                ui.label("Choose one between two drawings regarding to the question. We realize that creativity probably overlaps other criteria one might consider (for example: aesthetic appeal, or technical execution) but we ask you to rate the artworks solely on the basis of your creativity.").style('font-weight:600; white-space:normal;').classes('break-words')
                 ui.label(f"\"{question}\"").style('color: black; font-size: 1.25rem;').classes('break-words')
                 ui.separator()
 
@@ -474,4 +445,10 @@ def index():
 # Expose ASGI app for uvicorn / gunicorn
 app = app
 if __name__ in {'__main__', '__mp_main__'}:
-    ui.run(host='0.0.0.0', port=16867, title='HRI Creative Co-Painting', reload=False, show=False)
+    ui.run(
+        host='0.0.0.0',
+        port=16867,
+        title='HRI Creative Co-Painting',
+        reload=False,
+        show=False,
+    )

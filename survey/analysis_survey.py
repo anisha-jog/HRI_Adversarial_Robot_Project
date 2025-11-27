@@ -13,6 +13,64 @@ LEVEL_MAP = {
     "different": 2,
 }
 
+def krippendorff_alpha_nominal(df: pd.DataFrame) -> float:
+    """
+    Compute Krippendorff's alpha (nominal) for a DataFrame with columns:
+    'A', 'B', 'question', 'preferred', 'source_file'.
+
+    Each unique (A, B, question) is an item. 'preferred' is 0/1.
+    """
+    # Drop rows without labels
+    df = df.dropna(subset=['preferred']).copy()
+
+    # Ensure one rating per (item, rater); if duplicates exist, keep first
+    df = df.drop_duplicates(subset=['A', 'B', 'question', 'source_file'])
+
+    # Build an item_id from A, B, question
+    df['item_id'] = df[['A', 'B', 'question']].astype(str).agg('||'.join, axis=1)
+
+    # Count how many times each category (0 or 1) was chosen per item
+    counts = df.groupby(['item_id', 'preferred']).size().unstack(fill_value=0)
+
+    # Number of ratings per item
+    n_j = counts.sum(axis=1)
+
+    # Keep only items with at least 2 ratings (needed for agreement)
+    counts = counts[n_j >= 2]
+    n_j = counts.sum(axis=1)
+
+    if len(n_j) == 0:
+        return np.nan  # not enough overlap to compute alpha
+
+    # --------- Observed disagreement Do ---------
+    # For each item j:
+    #   D_o(j) numerator = sum_c n_cj (n_j - n_cj) = n_j^2 - sum_c n_cj^2
+    num_Do = ((n_j ** 2 - (counts ** 2).sum(axis=1))).sum()
+    den_Do = (n_j * (n_j - 1)).sum()
+    Do = num_Do / den_Do
+
+    # --------- Expected disagreement De ---------
+    # n_c = total number of times category c was used across all items
+    n_c = counts.sum(axis=0)
+    N = n_c.sum()
+    De = (N**2 - (n_c**2).sum()) / (N * (N - 1))
+
+    alpha = 1 - Do / De if De != 0 else np.nan
+    return float(alpha)
+
+def krippendorff_alpha_by_question(df_all: pd.DataFrame) -> pd.DataFrame:
+    """
+    Compute Krippendorff's alpha per unique 'question'.
+    Returns a DataFrame with columns: question, alpha, n_items.
+    """
+    rows = []
+    for q, df_q in df_all.groupby('question'):
+        # Just reuse the function above on the subset
+        alpha_q = krippendorff_alpha_nominal(df_q)
+        n_items = df_q[['A', 'B', 'question']].drop_duplicates().shape[0]
+        rows.append({'question': q, 'alpha': alpha_q, 'n_items': n_items})
+    return pd.DataFrame(rows).sort_values('alpha', ascending=False)
+
 def parse_design_levels(design_name: str):
     """
     Parse a design filename like:
@@ -197,6 +255,14 @@ def fit_bradley_terry(csv_paths,
 
     print(f"Loaded {len(df_all)} rows from {len(paths)} file(s).")
 
+    # Overall inter-rater reliability across all items/questions
+    alpha_overall = krippendorff_alpha_nominal(df_all)
+    print(f"Overall Krippendorff's alpha (nominal): {alpha_overall:.3f}")
+
+    # Optional: per-question reliability
+    alpha_per_question = krippendorff_alpha_by_question(df_all)
+    print("Krippendorff's alpha by question: ", alpha_per_question)
+
     # Fit BT on the combined DataFrame
     return fit_bradley_terry_from_df(
         df_all,
@@ -378,12 +444,12 @@ def plot_design_space_3d_bubbles(result_df, title: str = ""):
 if __name__ == "__main__":
     result_df = fit_bradley_terry(
         [
-            "result/user_rating_daehwa.csv",
             "result/user_rating_daehwa2.csv",
+            "result/user_rating_Jack.csv",
+            "result/user_rating_Angie.csv",
         ],
         # question_filter="Which drawing is more creative?",
     )
-    print(result_df.head(10))
 
     result_df = add_3d_coords(result_df)
 
