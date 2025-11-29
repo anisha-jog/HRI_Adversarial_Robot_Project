@@ -3,7 +3,7 @@ from PIL import Image
 import matplotlib.pyplot as plt
 
 # === CONFIG ===
-base_dir = "./saved_images/2/"
+base_dir = "./saved_images/6/"
 
 visual_levels = ["similar", "neutral", "different"]   # x-axis (columns)
 semantic_levels = ["different", "neutral", "similar"] # y-axis (rows, top -> bottom)
