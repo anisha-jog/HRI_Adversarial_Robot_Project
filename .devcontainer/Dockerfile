@@ -26,9 +26,6 @@ RUN apt-get update && apt-get install -y \
     software-properties-common \
     && rm -rf /var/lib/apt/lists/*
 
-# --- Workspace and Venv Setup ---
-WORKDIR /ros2_ws
-
 # Install fish
 RUN fish -c "curl -sL https://git.io/fisher | source && fisher install jorgebucaran/fisher"
 
@@ -46,6 +43,9 @@ COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN dos2unix /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+
+# --- Workspace and Venv Setup ---
+# WORKDIR /ros2_ws
 
 # Default command: keeps the container running and ready for interactive use
 CMD ["bash"]
