@@ -869,7 +869,7 @@ async def api_ai_draw(payload: ImagePayload):
                 )
                 session.participant_name = None
                 session.condition = CONDITIONS.get(session.mode, None)
-                session.prompt = GEMINI_PROMPT
+                session.prompt = CONTROL_PROMPT
                 session.turn_idx = 0
                 session.last_drawing = None
             else:
@@ -877,7 +877,7 @@ async def api_ai_draw(payload: ImagePayload):
                 next_mode = mode_seq[0]
                 session.mode = next_mode
                 session.condition = CONDITIONS.get(next_mode, None)
-                session.prompt = GEMINI_PROMPT  # new session starts with initial prompt
+                session.prompt = CONTROL_PROMPT  # new session starts with initial prompt
                 session.turn_idx = 0
                 session.last_drawing = None
 
@@ -1003,7 +1003,7 @@ async def api_set_mode(payload: ModePayload):
         session.condition = CONDITIONS[mode]
         # Reset prompt when switching modes so Gemini knows fresh context.
         session.prompt = CONTROL_PROMPT
-        msg = f"Mode set to '{mode}'. Prompt reset to initial GEMINI_PROMPT."
+        msg = f"Mode set to '{mode}'. Prompt reset to initial CONTROL_PROMPT."
         print(msg)
         return JSONResponse(
                     {
