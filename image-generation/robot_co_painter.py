@@ -2,14 +2,16 @@ import cv2, numpy as np
 from config import CANVAS_SIZE, GEMINI_PROMPT, SUBSEQUENT_PROMPT, CONDITIONS
 from PIL import Image
 import image_to_svg as im
+import sys
 from paint_with_gemini import (
     canvas,
-    get_gemini_drawing, init_gemini_api, get_model, API_KEY
+    draw_callback, combine_images, get_gemini_drawing, init_gemini_api, get_model, API_KEY
 )
 
-# Study prompt and condition
-prompt = GEMINI_PROMPT
-condition = CONDITIONS["adversarial"]
+import rclpy
+from ur5_draw.draw_node import Draw as DrawNode
+
+
 
 # ArUco marker IDs for the corners
 # Please ensure these IDs match the markers you are using
@@ -21,7 +23,7 @@ aruco_corner_order = {"top-left" : 20,
 def init_camera(camera_index=0, resolution=(1920, 1080)):
     ''' Initializes the camera with the given index and resolution. '''
     # 0 for device native, 1 for USB webcam
-    cam = cv2.VideoCapture(camera_index)   
+    cam = cv2.VideoCapture(camera_index)
     cam.set(cv2.CAP_PROP_FRAME_WIDTH, resolution[0])
     cam.set(cv2.CAP_PROP_FRAME_HEIGHT, resolution[1])
     return cam
@@ -50,13 +52,13 @@ def update_camera_feed(frame):
     img_bw = cv2.cvtColor(resized_frame, cv2.COLOR_BGR2GRAY)
     aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_6X6_250)
     parameters = cv2.aruco.DetectorParameters()
-    detector = cv2.aruco.ArucoDetector(aruco_dict, parameters)  
+    detector = cv2.aruco.ArucoDetector(aruco_dict, parameters)
     corners, ids, rejected = detector.detectMarkers(img_bw)
 
     if ids is not None:
         # Draw detected markers
         cv2.aruco.drawDetectedMarkers(resized_frame, corners, ids)
-    
+
     # Camera feed preview:
     cv2.imshow("Camera Feed, Press 'N' to add drawing", resized_frame)
 
@@ -101,20 +103,33 @@ def init_canvas():
     print("  - Press 's' to save the current drawing as PNG.")
     return old_drawing, new_drawing
 
-    
-def run_application():
-    cam = init_camera(1) # 1 -> index of camera (0 for device native, 1 for USB webcam)
+
+def run_application(args=None,run_camera=True):
+    rclpy.init(args=args)
+    draw_node = DrawNode()
+    # Study prompt and condition
+    prompt = GEMINI_PROMPT
+    condition = CONDITIONS["adversarial"]
+    if run_camera:
+        cam = init_camera(1) # 1 -> index of camera (0 for device native, 1 for USB webcam)
+    else:
+        draw_window_name = "Draw Pad, Press 'N' to add drawing"
+        cv2.imshow(draw_window_name, canvas)
+        cv2.setMouseCallback(draw_window_name, draw_callback)
     old_drawing, new_drawing = init_canvas()
     init_gemini_api(API_KEY)
     model = get_model()
     while True:
-        # Show real-time camera feed in a separate window
-        ret, frame = cam.read()
-        if ret:
-            update_camera_feed(frame)
+        if run_camera:
+            # Show real-time camera feed in a separate window
+            ret, frame = cam.read()
+            if ret:
+                update_camera_feed(frame)
+        else:
+            cv2.imshow(draw_window_name, canvas)
         space = np.zeros((old_drawing.shape[0], 3, 3)).astype(type(old_drawing[0,0,0]))
         cv2.imshow("Old drawing / New drawing", np.hstack((old_drawing, space, new_drawing)))
-        
+
         key = cv2.waitKey(1) & 0xFF
 
         if key == ord('q') or key == 27 or key == ord('Q'):
@@ -122,26 +137,31 @@ def run_application():
             break
         elif key == ord('n') or key == ord('N'):
             # take a picture from the camera, add camera image to canvas
-            captured_frame = capture_camera_frame(cam)
+            captured_frame = capture_camera_frame(cam) if run_camera else (np.zeros((4,)), canvas.copy())
             if captured_frame is not None  and captured_frame[0].shape[0] == 4:
                 # Ensure the captured drawing matches the canvas size
                 captured_drawing = cv2.resize(captured_frame[1], (CANVAS_SIZE[1], CANVAS_SIZE[0]))
-                captured_drawing = cv2.cvtColor(captured_drawing, cv2.COLOR_GRAY2BGR)
+                if run_camera:
+                    captured_drawing = cv2.cvtColor(captured_drawing, cv2.COLOR_GRAY2BGR)
                 canvas[:] = captured_drawing
                 model = get_model()
-                (old_drawing, new_drawing, combined_drawing, text) = get_gemini_drawing(canvas, prompt, model, condition)
-                
-                # Generate trajectory from new drawing 
-                lines = im.image_to_lines(new_drawing, segments=10)
-                
-                # Target width and height should correspond to 8.5 x 11 inches in meters:
-                traj = im.convert_pixels_to_meters(lines, new_drawing.shape[0], new_drawing.shape[1])
+                try:
+                    (old_drawing, new_drawing, combined_drawing, text) = get_gemini_drawing(canvas, prompt, model, condition)
+                except TypeError:
+                    print("Gemini API call failed. Sending given drawing.")
+                    old_drawing = canvas.copy()
+                    new_drawing = canvas.copy()
+                    combined_drawing = combine_images(old_drawing, new_drawing)
 
-                ###########################
-                ### TODO(@Jack): Add ROS2 logic here!
-                ###########################
+                # Generate trajectory from new drawing
+                strokes = im.image_to_lines(new_drawing, segments=10)
+                try:
+                    draw_node.draw_strokes(strokes,img_length=new_drawing.shape[0],img_width=new_drawing.shape[1])
+                except KeyboardInterrupt:
+                    break
             else:
                 print("Could not detect all 4 markers. Please adjust the camera and try again.")
+
         elif key == ord('c') or key == ord('C'):
             print("Canvas cleared.")
             canvas[:] = 255
@@ -154,6 +174,9 @@ def run_application():
             cv2.imwrite("new_drawing.png", new_drawing)
             cv2.imwrite("combined_drawing.png", combined_drawing)
     cv2.destroyAllWindows()
+    draw_node.destroy_node()
+    rclpy.shutdown()
 
 if __name__ == "__main__":
-    run_application()
+    run_virtual_camera = True if len(sys.argv) > 1 and sys.argv[1] == "--virtual-camera" else False
+    run_application(run_camera=not run_virtual_camera)

@@ -22,7 +22,7 @@ IN_TO_M = 0.0254
 
 class Draw(Node):
     PEN_HEIGHT = .05
-    def __init__(self,img_width,img_length):
+    def __init__(self):
         super().__init__('draw_img')
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self)
@@ -46,8 +46,6 @@ class Draw(Node):
         self.img_viz.points = []
 
         # image settings
-        self.img_width = img_width
-        self.img_length = img_length
         scale_factor = .9
         self.page_length_m  =  11 * IN_TO_M * scale_factor
         self.page_width_m   = 8.5 * IN_TO_M * scale_factor
@@ -103,13 +101,13 @@ class Draw(Node):
         self.get_logger().info("Sending request to move to the target pose...")
         return self.client.call_async(self.request)
 
-    def draw_stroke_traj(self, points):
+    def draw_stroke_traj(self, points,img_length,img_width):
         pose_list = []
         for point in points:
             x, y = point
             img_pose = Pose()
-            img_pose.position.x = x/self.img_length * self.page_length_m
-            img_pose.position.y = y/self.img_width * self.page_width_m
+            img_pose.position.x = x/img_length * self.page_length_m
+            img_pose.position.y = y/img_width * self.page_width_m
             img_pose.position.z = self.PEN_HEIGHT
 
             img_pose.orientation.w = 0.707
@@ -132,26 +130,28 @@ class Draw(Node):
             self.get_logger().info(f"Move completed {'' if future.result().success else 'un'}successfully. {future.result().message}")
         else:
             self.get_logger().error("Service call failed.")
-    
-    def draw_strokes(self, strokes):
+
+    def draw_strokes(self, strokes,img_length,img_width):
+        self.get_logger().info(f"Starting Drawing of {len(strokes)} strokes")
         for i,stroke in enumerate(strokes):
             self.get_logger().info(f"Starting stroke {i} of length {len(stroke)}")
-            self.draw_stroke_traj(stroke)
+            self.draw_stroke_traj(stroke,img_length,img_width)
         self.get_logger().info("All strokes drawn.")
         self.go_home()
 
 def main(args=None):
     rclpy.init(args=args)
-    test_img = cv2.imread('/home/studioadmin/HRI_Adversarial_Robot_Project/ros2_ws/test.jpg')
+    test_img = cv2.imread('/HRI_Adversarial_Robot_Project/ros2_ws/test.jpg')
+    # test_img = cv2.imread('/home/studioadmin/HRI_Adversarial_Robot_Project/ros2_ws/test.jpg')
     height, width, channels = test_img.shape
     strokes = image_to_lines(test_img)
 
     print(*[f"{i}::{len(s)}\n" for i,s in enumerate(strokes)])
 
-    draw_node = Draw(img_length=height,img_width=width)
+    draw_node = Draw()
 
     try:
-        draw_node.draw_strokes(strokes)
+        draw_node.draw_strokes(strokes,img_length=height,img_width=width)
     except KeyboardInterrupt:
         pass
     finally:
