@@ -5,12 +5,19 @@ services:
       dockerfile: Dockerfile
 
     container_name: ur5_humble_dev
+    runtime: nvidia
 
     security_opt:
       - seccomp:unconfined
 
     volumes:
-      - ./../ros2_ws:/ros2_ws
+      - ./../ros2_ws:/HRI_Adversarial_Robot_Project/ros2_ws
+      - ./../image-generation:/HRI_Adversarial_Robot_Project/image-generation
+      - $HOME/.Xauthority:/root/.Xauthority
+      - /tmp/.X11-unix:/tmp/.X11-unix
+
+    working_dir: /HRI_Adversarial_Robot_Project/ros2_ws
+    # working_dir: /HRI_Adversarial_Robot_Project
 
     network_mode: "host"
 
@@ -18,6 +25,7 @@ services:
       - ROS_DOMAIN_ID=42
       - QT_X11_NO_MITSHM=1
       - DISPLAY=$DISPLAY
+      - NVIDIA_VISIBLE_DEVICES=all
       # - RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
       # - CYCLONEDDS_URI=/ros2_ws/cyclonedds.xml
 
