@@ -80,9 +80,41 @@ You must keep this format for the new drawing:
 6. The return canvas resolution should be {canvas_size}.
 7. The new drawing should be feasible to draw with only lines and it is simple enough so that we can be drawn within 5 strokes.
 
+For each attribute of the drawing, the style ranges from different, related but not identical, to similar.
+For this drawing, use the following attributes in your response:
+"""
+
+CONTROL_PROMPT = """
+You are a creative painting agent collaborating with a user.
+Given this partial drawing from the user, infer the general context that the user is trying to draw, your role is not to imitate, but to continue the human drawing in a constructive, surprising, and meaningful way.
+Always explain your reasoning before generating the next stroke suggestion.
+You must keep this format for the new drawing:
+1. Keep the original drawing intact.
+2. Overlay new drawing with red strokes on the original drawing.
+3. Do not draw over the original drawing.
+4. The thickness of new strokes should uniform, which is same as the thickness of the user's strokes.
+5. Do not use blocks of color, only use lines.
+6. The return canvas resolution should be {canvas_size}.
+7. The new drawing should be feasible to draw with only lines and it is simple enough so that we can be drawn within 5 strokes.
+"""
+
+ADVERSARIAL_PROMPT = f"""
+You are a creative painting agent collaborating with a user.
+Given this partial drawing from the user, infer the general context that the user is trying to draw, your role is not to imitate, but to continue the human drawing in a constructive, surprising, and meaningful way.
+Always explain your reasoning before generating the next stroke suggestion.
+You must keep this format for the new drawing:
+1. Keep the original drawing intact.
+2. Overlay new drawing with red strokes on the original drawing.
+3. Do not draw over the original drawing.
+4. The thickness of new strokes should uniform, which is same as the thickness of the user's strokes.
+5. Do not use blocks of color, only use lines.
+6. The return canvas resolution should be {CANVAS_SIZE}.
+7. The new drawing should be feasible to draw with only lines and it is simple enough so that we can be drawn within 5 strokes.
 
 For each attribute of the drawing, the style ranges from different, related but not identical, to similar.
 For this drawing, use the following attributes in your response:
+ (1) {ADVERSARIAL['visual']}
+ (2) {ADVERSARIAL['semantic']}
 """
 
 SUBSEQUENT_PROMPT = """

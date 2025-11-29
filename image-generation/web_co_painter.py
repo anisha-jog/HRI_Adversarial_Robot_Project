@@ -17,7 +17,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel
 import uvicorn
 
-from config import CANVAS_SIZE, GEMINI_PROMPT, SUBSEQUENT_PROMPT, CONDITIONS
+from config import CANVAS_SIZE, CONTROL_PROMPT, ADVERSARIAL_PROMPT, SUBSEQUENT_PROMPT, CONDITIONS
 # from image_to_svg import image_to_svg
 from paint_with_gemini import (
     get_gemini_drawing,
@@ -88,7 +88,7 @@ def get_or_create_session(participant: str, default_mode: str = "adversarial") -
     if participant not in sessions:
         sessions[participant] = SessionState(
             mode=default_mode,
-            prompt=GEMINI_PROMPT,
+            prompt=ADVERSARIAL_PROMPT,
             turn_idx=0,
             last_drawing=None,
             api_key=d_api_key,
@@ -762,7 +762,7 @@ async def api_start_session(payload: ParticipantPayload):
     session = SessionState(
         mode=chosen_mode,
         condition=CONDITIONS[chosen_mode],
-        prompt=GEMINI_PROMPT,
+        prompt=CONTROL_PROMPT, # ADVERSARIAL_PROMPT
         turn_idx=0,
         last_drawing=None,
         mode_seq=mode_seq,
@@ -1002,7 +1002,7 @@ async def api_set_mode(payload: ModePayload):
         session.mode = mode
         session.condition = CONDITIONS[mode]
         # Reset prompt when switching modes so Gemini knows fresh context.
-        session.prompt = GEMINI_PROMPT
+        session.prompt = CONTROL_PROMPT
         msg = f"Mode set to '{mode}'. Prompt reset to initial GEMINI_PROMPT."
         print(msg)
         return JSONResponse(

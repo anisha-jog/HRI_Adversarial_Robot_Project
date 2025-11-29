@@ -1,5 +1,5 @@
 import cv2, numpy as np
-from config import CANVAS_SIZE, GEMINI_PROMPT, SUBSEQUENT_PROMPT, CONDITIONS
+from config import CANVAS_SIZE, CONTROL_PROMPT, ADVERSARIAL_PROMPT
 from PIL import Image
 import image_to_svg as im
 import sys
@@ -108,8 +108,7 @@ def run_application(args=None,run_camera=True, use_action_server=False):
     rclpy.init(args=args)
     draw_node = DrawActionClient() if use_action_server else DrawNode()
     # Study prompt and condition
-    prompt = GEMINI_PROMPT
-    condition = CONDITIONS["adversarial"]
+    prompt = ADVERSARIAL_PROMPT # CONTROL_PROMPT
     if run_camera:
         cam = init_camera(1) # 1 -> index of camera (0 for device native, 1 for USB webcam)
     else:
@@ -146,7 +145,7 @@ def run_application(args=None,run_camera=True, use_action_server=False):
                 canvas[:] = captured_drawing
                 model = get_model()
                 try:
-                    (old_drawing, new_drawing, combined_drawing, text) = get_gemini_drawing(canvas, prompt, model, condition)
+                    (old_drawing, new_drawing, combined_drawing, text) = get_gemini_drawing(canvas, prompt, model, None)
                 except TypeError:
                     print("Gemini API call failed. Sending given drawing.")
                     old_drawing = canvas.copy()

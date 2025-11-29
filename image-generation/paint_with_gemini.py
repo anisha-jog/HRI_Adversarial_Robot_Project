@@ -5,7 +5,7 @@ from PIL import Image
 import io
 import os
 import sys
-from config import API_KEY, CANVAS_SIZE, GEMINI_PROMPT, SUBSEQUENT_PROMPT, CONDITIONS
+from config import API_KEY, CANVAS_SIZE
 
 module_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../tests'))
 sys.path.insert(0, module_dir)
@@ -62,7 +62,7 @@ def draw_callback(event, x, y, flags, param):
     elif event == cv2.EVENT_MOUSEMOVE:
         if drawing:
             # Draw a black line from the last point to the current point
-            cv2.line(canvas, last_point, (x, y), (0, 0, 0), 1.5)
+            cv2.line(canvas, last_point, (x, y), (0, 0, 0), 1)
             last_point = (x, y)
     elif event == cv2.EVENT_LBUTTONUP:
         drawing = False

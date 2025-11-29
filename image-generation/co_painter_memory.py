@@ -1,5 +1,5 @@
 import cv2, numpy as np
-from config import CANVAS_SIZE, GEMINI_PROMPT, SUBSEQUENT_PROMPT, CONDITIONS
+from config import CANVAS_SIZE, SUBSEQUENT_PROMPT, CONTROL_PROMPT, ADVERSARIAL_PROMPT
 from image_to_svg import image_to_svg
 from paint_with_gemini import (
     canvas,
@@ -23,8 +23,7 @@ def run_application():
     print("  - Press 's' to save the current drawing as PNG and SVG.")
     init_gemini_api(API_KEY)
     model = get_model()
-    prompt = GEMINI_PROMPT
-    condition = CONDITIONS["adversarial"]
+    prompt = ADVERSARIAL_PROMPT # CONTROL_PROMPT
 
     while True:
         cv2.imshow(window_name, canvas)
@@ -37,9 +36,8 @@ def run_application():
             print("Exiting...")
             break
         elif key == ord('a'):
-            (old_drawing, new_drawing, combined_drawing, text) = get_gemini_drawing(canvas.copy(), prompt, model, condition)
+            (old_drawing, new_drawing, combined_drawing, text) = get_gemini_drawing(canvas.copy(), prompt, model, None)
             prompt = SUBSEQUENT_PROMPT
-            condition = None
             if combined_drawing is not None:
                 canvas[:] = combined_drawing
         elif key == ord('c'):
