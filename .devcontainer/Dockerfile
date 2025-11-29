@@ -32,6 +32,15 @@ WORKDIR /ros2_ws
 # Install fish
 RUN fish -c "curl -sL https://git.io/fisher | source && fisher install jorgebucaran/fisher"
 
+RUN python3 -m pip install Pillow \
+    numpy \
+    opencv-python \
+    svgwrite \
+    google-generativeai \
+    requests \
+    potracer \
+    scikit-image
+
 # Copy custom entrypoint script
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN dos2unix /usr/local/bin/entrypoint.sh

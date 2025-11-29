@@ -95,8 +95,6 @@ def generate_launch_description():
     enable_sim = LaunchConfiguration('enable_sim')
     robot_ip = LaunchConfiguration('robot_ip')
     ur_type = LaunchConfiguration('ur_type')
-    x_offset = LaunchConfiguration('x_offset')
-    y_offset = LaunchConfiguration('y_offset')
 
     # Argument to switch between real robot and simulation
     enable_sim_arg = DeclareLaunchArgument(
@@ -105,16 +103,6 @@ def generate_launch_description():
         description='Set to true to launch in simulation mode (using fake hardware) or false for real robot.',
     )
 
-    set_x_offset = DeclareLaunchArgument(
-        'x_offset',
-        default_value='0.25',
-        description='image frame x offset from base_link frame',
-    )
-    set_y_offset = DeclareLaunchArgument(
-        'y_offset',
-        default_value='-0.25',
-        description='image frame y offset from base_link frame',
-    )
     # Robot IP (only needed when enable_sim is false)
     robot_ip_arg = DeclareLaunchArgument(
         'robot_ip',
@@ -150,10 +138,10 @@ def generate_launch_description():
         launch_arguments={
             'ur_type': ur_type,
             'robot_ip': robot_ip,
+            'reverse_ip': '192.168.56.101',
             'use_fake_hardware': 'false',
-            'headless_mode': 'true',
+            # 'headless_mode': 'true',
             'use_sim_time': 'false', # Important for real robot
-            'initial_joint_controller': 'joint_trajectory_controller',
             'launch_rviz': 'false'
         }.items(),
     )
@@ -186,13 +174,26 @@ def generate_launch_description():
         }.items(),
     )
 
+    # metal cart
+    static_table_frame_pub = Node(
+                package='tf2_ros',
+                executable='static_transform_publisher',
+                name='static_table_frame_pub',
+                arguments=[ 
+                    '--x', '0.0', '--y', '0.0', '--z', '-0.108', # lower value to lower the table
+                    '--yaw', '-0.785398', '--pitch', '0.0', '--roll',
+                    '0', '--frame-id', 'world', '--child-frame-id', 'table_frame']
+            )
+
+    # image frame on cart
     static_img_frame_pub = Node(
                 package='tf2_ros',
                 executable='static_transform_publisher',
-                arguments=[
-                    '--x', x_offset, '--y', y_offset, '--z', '0',
-                    '--yaw', '0', '--pitch', '0', '--roll',
-                    '0', '--frame-id', 'base_link', '--child-frame-id', 'image_frame']
+                name='static_img_frame_pub',
+                arguments=[ 
+                    '--x', '0.5', '--y', '-0.12', '--z', '0.014', # lower value brings pen closer to table
+                    '--yaw', '0.0', '--pitch', '0', '--roll',
+                    '0', '--frame-id', 'table_frame', '--child-frame-id', 'image_frame']
             )
 
     robot_description = get_robot_description(ur_type,robot_ip)
@@ -209,18 +210,21 @@ def generate_launch_description():
         ],
     )
 
-    # bass source /ros2_ws/install/setup.bash
-    # ros2 launch ur5_draw ur5_draw.launch.py enable_sim:=true
-    # ros2 run ur5_draw draw_svg_action.py
+    draw_action = Node(
+        package="ur5_draw",
+        executable="action",
+        name="draw_action_server",
+        output="screen",
+    )
 
     return LaunchDescription([
         enable_sim_arg,
         robot_ip_arg,
         ur_type_arg,
-        set_x_offset,
-        set_y_offset,
+        static_table_frame_pub,
         static_img_frame_pub,
         moveit_service,
+        draw_action,
 
         # Launches the appropriate UR driver setup
         ur_driver_real,
