@@ -10,7 +10,7 @@ from paint_with_gemini import (
 
 import rclpy
 from ur5_draw.draw_node import Draw as DrawNode
-
+from ur5_draw.test_action_client import DrawActionClient
 
 
 # ArUco marker IDs for the corners
@@ -104,9 +104,9 @@ def init_canvas():
     return old_drawing, new_drawing
 
 
-def run_application(args=None,run_camera=True):
+def run_application(args=None,run_camera=True, use_action_server=False):
     rclpy.init(args=args)
-    draw_node = DrawNode()
+    draw_node = DrawActionClient() if use_action_server else DrawNode()
     # Study prompt and condition
     prompt = GEMINI_PROMPT
     condition = CONDITIONS["adversarial"]
@@ -155,10 +155,21 @@ def run_application(args=None,run_camera=True):
 
                 # Generate trajectory from new drawing
                 strokes = im.image_to_lines(new_drawing, segments=10)
-                try:
-                    draw_node.draw_strokes(strokes,img_length=new_drawing.shape[0],img_width=new_drawing.shape[1])
-                except KeyboardInterrupt:
-                    break
+                if use_action_server:
+                    future = draw_node.send_goal(strokes,img_length=new_drawing.shape[0],img_width=new_drawing.shape[1])
+                    if future is None:
+                        draw_node.get_logger().error('Failed to send goal')
+                    try:
+                        # Spin until the action completes
+                        rclpy.spin(draw_node)
+                    except KeyboardInterrupt:
+                        draw_node.get_logger().info('Keyboard interrupt, canceling goal...')
+                else:
+                    try:
+                        draw_node.draw_strokes(strokes,img_length=new_drawing.shape[0],img_width=new_drawing.shape[1])
+                    except KeyboardInterrupt:
+                        break
+
             else:
                 print("Could not detect all 4 markers. Please adjust the camera and try again.")
 
@@ -178,5 +189,6 @@ def run_application(args=None,run_camera=True):
     rclpy.shutdown()
 
 if __name__ == "__main__":
-    run_virtual_camera = True if len(sys.argv) > 1 and sys.argv[1] == "--virtual-camera" else False
-    run_application(run_camera=not run_virtual_camera)
+    run_virtual_camera = True if len(sys.argv) > 1 and "--virtual-camera" in sys.argv[1:] else False
+    use_action_server = True if len(sys.argv) > 1 and "--action-server" in sys.argv[1:] else False
+    run_application(run_camera=not run_virtual_camera, use_action_server=use_action_server)
