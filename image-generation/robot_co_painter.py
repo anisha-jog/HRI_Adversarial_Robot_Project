@@ -3,8 +3,9 @@ from config import CANVAS_SIZE, CONTROL_PROMPT, ADVERSARIAL_PROMPT
 from PIL import Image
 import image_to_svg as im
 import sys
+import datetime
 from paint_with_gemini import (
-    canvas,
+    canvas, blackize,
     draw_callback, combine_images, get_gemini_drawing, init_gemini_api, get_model, API_KEY
 )
 
@@ -15,10 +16,15 @@ from ur5_draw.test_action_client import DrawActionClient
 
 # ArUco marker IDs for the corners
 # Please ensure these IDs match the markers you are using
-aruco_corner_order = {"top-left" : 20,
-                      "top-right": 40,
-                      "bottom-right": 10,
-                      "bottom-left": 30}
+aruco_corner_order = {"bottom-right" : 20,
+                      "bottom-left": 40,
+                      "top-left": 10,
+                      "top-right": 30}
+# Flipped
+aruco_corner_order = {"bottom-left" : 20,
+                      "bottom-right": 40,
+                      "top-right": 10,
+                      "top-left": 30}
 
 def init_camera(camera_index=0, resolution=(1920, 1080)):
     ''' Initializes the camera with the given index and resolution. '''
@@ -89,6 +95,7 @@ def capture_camera_frame(cam):
                 if ids[i][0] == aruco_corner_order["top-left"]:
                     top_left = corners[i][0][0]
             transformed_image = transform_image(img, [top_left, top_right, bottom_right, bottom_left])
+            cv2.flip(transformed_image,1,transformed_image) # flip horizontally
             return  (ids, transformed_image)
     return None
 
@@ -103,33 +110,51 @@ def init_canvas():
     print("  - Press 's' to save the current drawing as PNG.")
     return old_drawing, new_drawing
 
+def update_frames(cam, old_drawing, new_drawing, run_camera=True,draw_window_name="Draw Pad, Press 'N' to add drawing"):
+    if run_camera:
+        # Show real-time camera feed in a separate window
+        ret, frame = cam.read()
+        if ret:
+            update_camera_feed(frame)
+    else:
+        cv2.imshow(draw_window_name, canvas)
+    space = np.zeros((old_drawing.shape[0], 3, 3)).astype(type(old_drawing[0,0,0]))
+    cv2.imshow("Old drawing / New drawing", np.hstack((old_drawing, space, new_drawing)))
+    return cv2.waitKey(1) & 0xFF
+
 
 def run_application(args=None,run_camera=True, use_action_server=False):
     rclpy.init(args=args)
     draw_node = DrawActionClient() if use_action_server else DrawNode()
     # Study prompt and condition
-    prompt = ADVERSARIAL_PROMPT # CONTROL_PROMPT
+    prompt = CONTROL_PROMPT
+    draw_window_name = "Draw Pad, Press 'N' to add drawing"
     if run_camera:
-        cam = init_camera(1) # 1 -> index of camera (0 for device native, 1 for USB webcam)
+        # try:
+        #     cam = init_camera(1) # 1 -> index of camera (0 for device native, 1 for USB webcam)
+        # except: 
+        #     cam = init_camera(0) # 0 -> index of camera (0 for device native, 1 for USB webcam)
+        cam = init_camera(0) # 0 -> index of camera (0 for device native, 1 for USB webcam)
     else:
-        draw_window_name = "Draw Pad, Press 'N' to add drawing"
         cv2.imshow(draw_window_name, canvas)
         cv2.setMouseCallback(draw_window_name, draw_callback)
     old_drawing, new_drawing = init_canvas()
     init_gemini_api(API_KEY)
     model = get_model()
+    if not use_action_server:
+        draw_node.go_home()
+    
+    turn_number = 0
     while True:
-        if run_camera:
-            # Show real-time camera feed in a separate window
-            ret, frame = cam.read()
-            if ret:
-                update_camera_feed(frame)
-        else:
-            cv2.imshow(draw_window_name, canvas)
-        space = np.zeros((old_drawing.shape[0], 3, 3)).astype(type(old_drawing[0,0,0]))
-        cv2.imshow("Old drawing / New drawing", np.hstack((old_drawing, space, new_drawing)))
-
-        key = cv2.waitKey(1) & 0xFF
+        key = update_frames(cam,old_drawing, new_drawing, run_camera,draw_window_name=draw_window_name)
+        captured_frame = capture_camera_frame(cam) if run_camera else (np.zeros((4,)), canvas.copy())
+        if captured_frame is not None  and captured_frame[0].shape[0] == 4:
+            captured_drawing = cv2.resize(captured_frame[1], (CANVAS_SIZE[1], CANVAS_SIZE[0]))
+            if run_camera:
+                captured_drawing = cv2.cvtColor(captured_drawing, cv2.COLOR_GRAY2BGR)
+            old_drawing[:] = blackize(captured_drawing)
+            
+            
 
         if key == ord('q') or key == 27 or key == ord('Q'):
             print("Exiting...")
@@ -152,14 +177,17 @@ def run_application(args=None,run_camera=True, use_action_server=False):
                     new_drawing = canvas.copy()
                     combined_drawing = combine_images(old_drawing, new_drawing)
 
+                update_frames(cam,old_drawing, new_drawing, run_camera,draw_window_name=draw_window_name)
                 # Generate trajectory from new drawing
-                strokes = im.image_to_lines(new_drawing, segments=10)
+                flip_new_drawing = cv2.flip(new_drawing,1) # flip horizontally
+                strokes = im.image_to_lines(flip_new_drawing, segments=10)
                 if use_action_server:
                     future = draw_node.send_goal(strokes,img_length=new_drawing.shape[0],img_width=new_drawing.shape[1])
                     if future is None:
                         draw_node.get_logger().error('Failed to send goal')
                     try:
                         # Spin until the action completes
+                        # update_frames(cam,old_drawing, new_drawing, run_camera,draw_window_name=draw_window_name)
                         rclpy.spin(draw_node)
                     except KeyboardInterrupt:
                         draw_node.get_logger().info('Keyboard interrupt, canceling goal...')
@@ -168,6 +196,8 @@ def run_application(args=None,run_camera=True, use_action_server=False):
                         draw_node.draw_strokes(strokes,img_length=new_drawing.shape[0],img_width=new_drawing.shape[1])
                     except KeyboardInterrupt:
                         break
+                turn_number += 1
+                print("Robot drawing completed. Press 'N' to capture next drawing.")
 
             else:
                 print("Could not detect all 4 markers. Please adjust the camera and try again.")
@@ -178,8 +208,11 @@ def run_application(args=None,run_camera=True, use_action_server=False):
             old_drawing[:] = 255
             new_drawing[:] = 255
             combined_drawing[:] = 255
+            turn_number = 0
         elif key == ord('s') or key == ord('S'):
-            cv2.imwrite("canvas.png", canvas)
+            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            print(f"Saving current drawing... at turn{turn_number}_{timestamp}.png")
+            cv2.imwrite(f"combined_drawing_turn{turn_number}_{timestamp}.png", combined_drawing)
             cv2.imwrite("old_drawing.png", old_drawing)
             cv2.imwrite("new_drawing.png", new_drawing)
             cv2.imwrite("combined_drawing.png", combined_drawing)
