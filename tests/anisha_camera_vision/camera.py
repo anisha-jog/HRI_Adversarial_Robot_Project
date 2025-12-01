@@ -4,7 +4,7 @@ import cv2
 # initialize the camera
 width = 1920
 height = 1080
-cam = cv2.VideoCapture(1)   # 1 -> index of camera (0 for device native, 1 for USB webcam)
+cam = cv2.VideoCapture(0)   # 1 -> index of camera (0 for device native, 1 for USB webcam)
 cam.set(cv2.CAP_PROP_FRAME_WIDTH, width)
 cam.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
 s, img = cam.read()
@@ -60,10 +60,10 @@ if s:    # frame captured without any errors
         cv2.imwrite("threshold.jpg", thresh) # save image
     
         # cv2.aruco.drawDetectedMarkers(img_bw, rejected)
-        # cv2.aruco.drawDetectedMarkers(img_bw, corners, ids)
-        # cv2.imshow('Detected Markers', img_bw)
-        # cv2.waitKey(0)
-        # cv2.destroyAllWindows()
+        cv2.aruco.drawDetectedMarkers(img_bw, corners, ids)
+        cv2.imshow('Detected Markers', img_bw)
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
 
     # cv2.namedWindow("cam-test", cv2.WINDOW_AUTOSIZE)
     # cv2.imshow("cam-test", img_bw)
@@ -71,3 +71,5 @@ if s:    # frame captured without any errors
     # cv2.destroyAllWindows()
 
     cv2.imwrite("captured_image.jpg", img_bw) # save image
+else:
+    print("Error: Unable to capture image from camera.")
