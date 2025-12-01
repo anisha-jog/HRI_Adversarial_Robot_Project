@@ -45,6 +45,7 @@ class DrawActionClient(Node):
             goal_msg.strokes.append(stroke_msg)
 
         self.get_logger().info('Sending goal to action server...')
+        self.action_completed = False
 
         # Send goal with feedback callback
         send_goal_future = self._action_client.send_goal_async(
@@ -93,8 +94,7 @@ class DrawActionClient(Node):
                 f'Message: {result.message}'
             )
 
-        # Shutdown after result
-        rclpy.shutdown()
+        self.action_completed = True
 
 
 def main(args=None):

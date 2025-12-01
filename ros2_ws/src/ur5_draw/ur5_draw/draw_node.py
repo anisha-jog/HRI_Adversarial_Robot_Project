@@ -141,14 +141,15 @@ class Draw(Node):
 
 def main(args=None):
     rclpy.init(args=args)
-    test_img = cv2.imread('/HRI_Adversarial_Robot_Project/ros2_ws/test.jpg')
-    # test_img = cv2.imread('/home/studioadmin/HRI_Adversarial_Robot_Project/ros2_ws/test.jpg')
+    # test_img = cv2.imread('/HRI_Adversarial_Robot_Project/ros2_ws/test.jpg')
+    test_img = cv2.imread('/home/studioadmin/HRI_Adversarial_Robot_Project/ros2_ws/test.jpg')
     height, width, channels = test_img.shape
     strokes = image_to_lines(test_img)
 
     print(*[f"{i}::{len(s)}\n" for i,s in enumerate(strokes)])
 
     draw_node = Draw()
+    draw_node.go_home()
 
     try:
         draw_node.draw_strokes(strokes,img_length=height,img_width=width)
