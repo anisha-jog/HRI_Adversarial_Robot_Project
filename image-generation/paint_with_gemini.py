@@ -78,7 +78,7 @@ def combine_images(image1, image2):
 
 def blackize(image_data):
     img_ = cv2.cvtColor(image_data, cv2.COLOR_BGR2GRAY)
-    _, img_bw = cv2.threshold(img_, 200, 255, cv2.THRESH_BINARY)
+    _, img_bw = cv2.threshold(img_, 150, 255, cv2.THRESH_BINARY)
     img_rgb = cv2.cvtColor(img_bw, cv2.COLOR_GRAY2RGB)
     return img_rgb
 
