@@ -46,9 +46,9 @@ class Draw(Node):
         self.img_viz.points = []
 
         # image settings
-        scale_factor = .9
-        self.page_length_m  =  11 * IN_TO_M * scale_factor
-        self.page_width_m   = 8.5 * IN_TO_M * scale_factor
+        scale_factor = 1
+        self.page_length_m  =  15 * IN_TO_M * scale_factor
+        self.page_width_m   =   11 * IN_TO_M * scale_factor
 
         # home pose in image frame
         self.home_pose = Pose(position=Point(y=-0.10, z=0.3),orientation=Quaternion(w=.707,y=.707))

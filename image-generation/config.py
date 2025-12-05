@@ -1,10 +1,11 @@
 # Gemini API Configuration
-API_KEY = "[YOUR KEY]"
+# API_KEY = "AIzaSyB6K-fZN4dUlwq4tbYfwJc5Ld7NdTGMNBA"
+API_KEY = "AIzaSyAJ84tNeC7YcZgW3xLSLzne_P0hl288Xw4"
 
 # Canvas configuration
-RESOLUTION = 40
-PAGE_SIZE = (8.5, 11)  # in inches
-CANVAS_SIZE = (int(PAGE_SIZE[1] * RESOLUTION), int(PAGE_SIZE[0] * RESOLUTION), 3)
+RESOLUTION =50
+PAGE_SIZE = (17, 14)  # in inches
+CANVAS_SIZE = (int(PAGE_SIZE[0] * RESOLUTION), int(PAGE_SIZE[1] * RESOLUTION), 3)
 
 # Axes of "Adversarial" Change
 VISUAL = {

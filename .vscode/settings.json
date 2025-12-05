@@ -1,3 +1,12 @@
 {
-   "terminal.integrated.shell.windows": "C:\\Program Files\\Git\\bin\\bash.exe"
+   "terminal.integrated.shell.windows": "C:\\Program Files\\Git\\bin\\bash.exe",
+   "files.associations": {
+      "string": "cpp",
+      "array": "cpp",
+      "bitset": "cpp",
+      "string_view": "cpp",
+      "initializer_list": "cpp",
+      "utility": "cpp"
+   },
+   "cmake.sourceDirectory": "/home/studioadmin/HRI_Adversarial_Robot_Project/ros2_ws/src/ur_draw_cmake"
 }
